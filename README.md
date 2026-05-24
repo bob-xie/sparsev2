@@ -69,3 +69,7 @@ If you find SparseDriveV2 is useful in your research or applications, please con
   year={2026}
 }
 ```
+
+---
+
+> 本项目复制于 [SparseDriveV2](https://github.com/swc-17/SparseDriveV2)
