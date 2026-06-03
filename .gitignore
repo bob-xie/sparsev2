@@ -34,3 +34,7 @@ vis/
 
 build/
 *.so
+
+maps/
+mini_navsim_logs/
+mini_sensor_blobs/

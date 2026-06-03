@@ -45,7 +45,7 @@ def make_cuda_ext(
 
 if __name__ == "__main__":
     setup(
-        name="deformable_aggregation_with_depth_ext",
+        name="deformable_aggregation_ext",
         ext_modules=[
             make_cuda_ext(
                 "deformable_aggregation_with_depth_ext",
@@ -55,12 +55,6 @@ if __name__ == "__main__":
                     f"src/deformable_aggregation_with_depth_cuda.cu",
                 ],
             ),
-        ],
-        cmdclass={"build_ext": BuildExtension},
-    )
-    setup(
-        name="deformable_aggregation_ext",
-        ext_modules=[
             make_cuda_ext(
                 "deformable_aggregation_ext",
                 module=".",
