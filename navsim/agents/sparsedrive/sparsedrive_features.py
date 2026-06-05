@@ -436,78 +436,128 @@ class SparseDriveTargetBuilder(AbstractTargetBuilder):
         return "sparsedrive_target"
 
     def compute_targets(self, scene: Scene, cfg: DictConfig) -> Dict[str, torch.Tensor]:
-        """Inherited, see superclass."""
+        """
+        计算训练目标（标签），包括未来轨迹、路径、路径掩码和速度。
+        
+        :param scene: Scene数据类对象，包含场景的完整信息（帧数据、元数据、地图等）
+        :param cfg: Hydra配置对象，包含数据集路径等配置信息
+        :return: 目标字典，包含训练所需的各种标签
+        """
+        # 1. 从场景中提取未来轨迹（以当前帧自车后轴为原点的局部坐标）
+        # trajectory_sampling.num_poses 指定轨迹的点数（默认约为 4s / 0.5s = 8 个点）[num_poses, 3]（x, y, theta）
         trajectory = torch.tensor(
             scene.get_future_trajectory(num_trajectory_frames=self._config.trajectory_sampling.num_poses).poses
         )
 
-        ## lateral path & londitudinal velocity
-        data_path = Path(cfg.navsim_log_path)
-        log_name = scene.scene_metadata.log_name
-        initial_token = scene.scene_metadata.initial_token
+        # 2. 计算侧向路径（lateral path）和纵向速度（longitudinal velocity）
+        # 获取日志文件路径：navsim_log_path/log_name.pkl
+        data_path = Path(cfg.navsim_log_path)  # 日志文件根目录
+        log_name = scene.scene_metadata.log_name  # 当前场景所属的日志文件名
+        initial_token = scene.scene_metadata.initial_token  # 当前场景的初始帧token，历史帧的最后一帧
+        
+        # 构建完整的日志pickle文件路径
         log_pickle_path = data_path / f"{log_name}.pkl"
+        # 加载该日志的所有帧数据，从原始数据获取，因为原始数据可以获得更多的未来数据
         scene_dict_list = pickle.load(open(log_pickle_path, "rb"))
+        
+        # 遍历帧列表，找到当前场景对应的起始帧
         for idx, scene_dict in enumerate(scene_dict_list):
-            token = scene_dict["token"]
-            if token != initial_token:
+            token = scene_dict["token"]  # 当前帧的token
+            if token != initial_token:  # 跳过直到找到匹配的起始帧
                 continue
+            
+            # 从当前帧开始，计算未来路径和路径掩码
             path, path_mask = self._get_future_path(idx, scene_dict_list)
-            pad_trajectory = torch.cat([torch.zeros(1, 2), trajectory[:, :2]], dim=0)
+            
+            # 计算纵向速度：通过相邻轨迹点的距离差除以时间间隔
+            # pad_trajectory: 在轨迹前添加一个零点，使速度维度与轨迹一致
+            pad_trajectory = torch.cat([torch.zeros(1, 2), trajectory[:, :2]], dim=0) #取轨迹的前两列，即x和y
+            # 计算相邻帧之间的距离差，再除以时间间隔得到速度
             velocity = torch.norm(pad_trajectory[1:] - pad_trajectory[:-1], dim=-1) / self._config.vel_time_interval
-            break
+            break  # 找到后立即退出循环
 
+        # 3. 返回目标字典
         return {
-            "trajectory": trajectory,
-            "path": path,
-            "path_mask": path_mask,
-            "velocity": velocity,
+            "trajectory": trajectory,      # 未来轨迹 [num_poses, 3] (x, y, heading)
+            "path": path,                  # 未来路径点 [len_path, 3] (x, y, heading)
+            "path_mask": path_mask,        # 路径掩码 [len_path]，标记有效路径点
+            "velocity": velocity,          # 纵向速度 [num_poses]
         }
 
     def _get_future_path(self, idx, scene_dict_list):
-        num_pts = self._config.len_path
-        interval = self._config.path_interval
-        global_ego_poses = []
-        distances = [0.0]
-        accumulated_distance = 0.0
-        max_dis = num_pts * interval
+        """
+        计算未来路径点（等间距采样）。
+        
+        与 trajectory 不同，path 是按**距离间隔**均匀采样的，而非时间间隔。
+        这更适合路径规划任务，因为路径规划关注的是空间上的均匀分布。
+        
+        :param idx: 当前帧在日志序列中的索引
+        :param scene_dict_list: 完整的日志帧字典列表
+        :return: (path, path_mask) - 路径点数组和有效掩码
+        """
+        # 从配置获取路径参数
+        num_pts = self._config.len_path       # 路径点数量（如 50）
+        interval = self._config.path_interval  # 路径点间隔（如 0.5 米）
+        
+        # 初始化变量
+        global_ego_poses = []      # 存储全局坐标系下的自车位姿序列
+        distances = [0.0]          # 存储相邻帧之间的距离（第一个元素为0）
+        accumulated_distance = 0.0 # 累计行驶距离
+        max_dis = num_pts * interval  # 需要的最大距离
+        
+        # 1. 从当前帧开始，收集足够的全局位姿数据
         for frame_idx in range(idx, len(scene_dict_list)):
-            scene_frame = scene_dict_list[frame_idx]
-            ego_translation = scene_frame["ego2global_translation"]
-            ego_quaternion = Quaternion(*scene_frame["ego2global_rotation"])
+            scene_frame = scene_dict_list[frame_idx]  # 获取当前帧数据
+            
+            # 提取自车在全局坐标系下的位姿
+            ego_translation = scene_frame["ego2global_translation"]  # 平移向量 [x, y, z]
+            ego_quaternion = Quaternion(*scene_frame["ego2global_rotation"])  # 四元数
             ego_pose = np.array(
                 [ego_translation[0], ego_translation[1], ego_quaternion.yaw_pitch_roll[0]],
                 dtype=np.float64,
-            )
-
+            )  # 转换为 [x, y, heading] 格式
+            
+            # 计算与上一帧的距离（从第二帧开始）
             if global_ego_poses:
                 prev_pose = global_ego_poses[-1]
-                distance = np.linalg.norm(ego_pose[:2] - prev_pose[:2])
+                distance = np.linalg.norm(ego_pose[:2] - prev_pose[:2])  # 只计算 xy 平面距离
                 distances.append(distance)
                 accumulated_distance += distance
-
+            
+            # 添加到位姿列表
             global_ego_poses.append(ego_pose)
-
+            
+            # 如果累计距离足够，停止收集
             if accumulated_distance > max_dis:
                 break
-
+        
+        # 2. 将全局坐标系转换为局部坐标系（以当前帧自车为原点）
         local_ego_poses = convert_absolute_to_relative_se2_array(
-            StateSE2(*global_ego_poses[0]), np.array(global_ego_poses, dtype=np.float64)
+            StateSE2(*global_ego_poses[0]),  # 当前帧位姿作为局部坐标系原点
+            np.array(global_ego_poses, dtype=np.float64)
         )
-
-        distances = np.cumsum(distances)
-        target_distance = np.arange(1, (num_pts + 1), 1) * interval
+        
+        # 3. 等间距采样：通过线性插值生成均匀分布的路径点
+        distances = np.cumsum(distances)  # 累计距离数组
+        target_distance = np.arange(1, (num_pts + 1), 1) * interval  # 目标采样距离 [interval, 2*interval, ...]
+        
+        # 使用线性插值在距离维度上采样
         path = np.array(
             [
-                np.interp(target_distance, distances, local_ego_poses[:, 0]),
-                np.interp(target_distance, distances, local_ego_poses[:, 1]),
-                np.interp(target_distance, distances, local_ego_poses[:, 2]),
+                np.interp(target_distance, distances, local_ego_poses[:, 0]),  # x 坐标插值
+                np.interp(target_distance, distances, local_ego_poses[:, 1]),  # y 坐标插值
+                np.interp(target_distance, distances, local_ego_poses[:, 2]),  # heading 插值
             ]
-        ).T
-
-        # limit yaw of path to [-pi, pi)
+        ).T  # 转置后形状为 [num_pts, 3]
+        
+        # 4. 将航向角限制在 [-pi, pi) 范围内
         path[:, 2] = (path[:, 2] + np.pi) % (2 * np.pi) - np.pi
 
-        path_mask = np.ones(num_pts, dtype=np.float32)
+        # 5. 构建路径掩码：标记有效路径点
+        path_mask = np.ones(num_pts, dtype=np.float32)  # 默认所有点都有效
+        # 计算实际有效的路径点数量（考虑日志数据不足的情况）
         valid_points = min(num_pts, int(np.floor(accumulated_distance / interval)))
-        path_mask[valid_points:] = 0
+        path_mask[valid_points:] = 0  # 超出范围的点标记为无效
+        
+        # 返回路径点和掩码
         return torch.tensor(path), torch.tensor(path_mask)

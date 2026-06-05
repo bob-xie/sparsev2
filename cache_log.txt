@@ -1,0 +1,52 @@
+nohup: ignoring input
+/home/xqb/DATA2/E2E_Project/miniconda3/envs/navsim/lib/python3.9/site-packages/lightning_fabric/__init__.py:41: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+[2026-06-03 16:21:23,611][__main__][INFO] - Global Seed set to 0
+Seed set to 0
+[2026-06-03 16:21:23,611][__main__][INFO] - Building Worker
+[2026-06-03 16:21:23,612][nuplan.planning.utils.multithreading.worker_pool][INFO] - Worker: Sequential
+[2026-06-03 16:21:23,612][nuplan.planning.utils.multithreading.worker_pool][INFO] - Number of nodes: 1
+Number of CPUs per node: 1
+Number of GPUs per node: 0
+Number of threads across all nodes: 1
+[2026-06-03 16:21:23,612][__main__][INFO] - Building SceneLoader
+Loading logs:   0%|          | 0/62 [00:00<?, ?it/s]Loading logs:   5%|▍         | 3/62 [00:00<00:03, 17.13it/s]Loading logs:  15%|█▍        | 9/62 [00:00<00:01, 35.88it/s]Loading logs:  23%|██▎       | 14/62 [00:00<00:01, 39.09it/s]Loading logs:  31%|███       | 19/62 [00:00<00:01, 41.66it/s]Loading logs:  39%|███▊      | 24/62 [00:00<00:01, 29.88it/s]Loading logs:  47%|████▋     | 29/62 [00:00<00:00, 33.42it/s]Loading logs:  53%|█████▎    | 33/62 [00:00<00:00, 33.51it/s]Loading logs:  60%|█████▉    | 37/62 [00:01<00:00, 31.90it/s]Loading logs:  66%|██████▌   | 41/62 [00:01<00:00, 32.08it/s]Loading logs:  73%|███████▎  | 45/62 [00:01<00:00, 25.18it/s]Loading logs:  81%|████████  | 50/62 [00:01<00:00, 29.55it/s]Loading logs:  87%|████████▋ | 54/62 [00:01<00:00, 30.85it/s]Loading logs:  94%|█████████▎| 58/62 [00:01<00:00, 31.23it/s]Loading logs: 100%|██████████| 62/62 [00:02<00:00, 24.29it/s]Loading logs: 100%|██████████| 62/62 [00:02<00:00, 29.57it/s]
+[2026-06-03 16:21:25,723][__main__][INFO] - Extracted 396 scenarios for training/validation dataset
+[2026-06-03 16:21:26,042][timm.models._builder][INFO] - Loading pretrained weights from file (ckpt/resnet34.bin)
+/home/xqb/DATA2/E2E_Project/miniconda3/envs/navsim/lib/python3.9/site-packages/torch/_utils.py:831: UserWarning: TypedStorage is deprecated. It will be removed in the future and UntypedStorage will be the only storage class. This should only matter to you if you are using storages directly.  To access UntypedStorage directly, use tensor.untyped_storage() instead of tensor.storage()
+  return self.fget.__get__(instance, owner)()
+[2026-06-03 16:21:26,086][timm.models._helpers][INFO] - Loaded  from checkpoint 'ckpt/resnet34.bin'
+[2026-06-03 16:21:26,095][timm.models._builder][INFO] - Missing keys (fc.weight, fc.bias) discovered while loading pretrained weights. This is expected if model is being adapted.
+Loading logs:   0%|          | 0/52 [00:00<?, ?it/s]Loading logs:   8%|▊         | 4/52 [00:00<00:01, 36.92it/s]Loading logs:  19%|█▉        | 10/52 [00:00<00:00, 48.15it/s]Loading logs:  29%|██▉       | 15/52 [00:00<00:01, 24.43it/s]Loading logs:  37%|███▋      | 19/52 [00:00<00:01, 27.55it/s]Loading logs:  44%|████▍     | 23/52 [00:00<00:00, 30.34it/s]Loading logs:  52%|█████▏    | 27/52 [00:00<00:00, 31.53it/s]Loading logs:  60%|█████▉    | 31/52 [00:01<00:00, 29.86it/s]Loading logs:  67%|██████▋   | 35/52 [00:01<00:00, 21.29it/s]Loading logs:  75%|███████▌  | 39/52 [00:01<00:00, 24.75it/s]Loading logs:  83%|████████▎ | 43/52 [00:01<00:00, 26.73it/s]Loading logs:  90%|█████████ | 47/52 [00:01<00:00, 26.59it/s]Loading logs:  98%|█████████▊| 51/52 [00:01<00:00, 28.78it/s]Loading logs: 100%|██████████| 52/52 [00:01<00:00, 28.05it/s]
+[2026-06-03 16:21:28,131][__main__][INFO] - Extracted 396 scenarios for thread_id=2035a4e9-652c-461a-b18f-afa05e7b2d70, node_id=0.
+Caching Dataset:   0%|          | 0/396 [00:00<?, ?it/s]Caching Dataset:   0%|          | 0/396 [00:00<?, ?it/s]
+Error executing job with overrides: ['agent=sparsedrive_agent', 'experiment_name=cache_navmini', 'train_test_split=navmini', 'cache_path=/home/xqb/DATA2/E2E_Project/sparsev2/exp/data_cache_navmini', 'worker=sequential']
+Traceback (most recent call last):
+  File "/home/xqb/DATA2/E2E_Project/sparsev2/navsim/planning/script/run_dataset_caching.py", line 99, in main
+    _ = worker_map(worker, cache_features, data_points)
+  File "/home/xqb/DATA2/E2E_Project/miniconda3/envs/navsim/lib/python3.9/site-packages/nuplan/planning/utils/multithreading/worker_utils.py", line 33, in worker_map
+    scattered_objects = worker.map(Task(fn=fn), object_chunks)
+  File "/home/xqb/DATA2/E2E_Project/miniconda3/envs/navsim/lib/python3.9/site-packages/nuplan/planning/utils/multithreading/worker_pool.py", line 117, in map
+    return self._map(task, *aligned_item_lists, verbose=verbose)
+  File "/home/xqb/DATA2/E2E_Project/miniconda3/envs/navsim/lib/python3.9/site-packages/nuplan/planning/utils/multithreading/worker_sequential.py", line 32, in _map
+    output = [
+  File "/home/xqb/DATA2/E2E_Project/miniconda3/envs/navsim/lib/python3.9/site-packages/nuplan/planning/utils/multithreading/worker_sequential.py", line 33, in <listcomp>
+    task.fn(*args)
+  File "/home/xqb/DATA2/E2E_Project/sparsev2/navsim/planning/script/run_dataset_caching.py", line 52, in cache_features
+    dataset = Dataset(
+  File "/home/xqb/DATA2/E2E_Project/sparsev2/navsim/planning/training/dataset.py", line 168, in __init__
+    self.cache_dataset()
+  File "/home/xqb/DATA2/E2E_Project/sparsev2/navsim/planning/training/dataset.py", line 270, in cache_dataset
+    self._cache_scene_with_token(token)
+  File "/home/xqb/DATA2/E2E_Project/sparsev2/navsim/planning/training/dataset.py", line 204, in _cache_scene_with_token
+    scene = self._scene_loader.get_scene_from_token(token)
+  File "/home/xqb/DATA2/E2E_Project/sparsev2/navsim/common/dataloader.py", line 244, in get_scene_from_token
+    return Scene.from_scene_dict_list(
+  File "/home/xqb/DATA2/E2E_Project/sparsev2/navsim/common/dataclasses.py", line 510, in from_scene_dict_list
+    cameras = Cameras.from_camera_dict(
+  File "/home/xqb/DATA2/E2E_Project/sparsev2/navsim/common/dataclasses.py", line 82, in from_camera_dict
+    image=np.array(Image.open(image_path)),
+  File "/home/xqb/DATA2/E2E_Project/miniconda3/envs/navsim/lib/python3.9/site-packages/PIL/Image.py", line 3513, in open
+    fp = builtins.open(filename, "rb")
+FileNotFoundError: [Errno 2] No such file or directory: '/home/xqb/DATA2/E2E_Project/sparsev2/sensor_blobs/mini/2021.07.16.18.06.21_veh-38_04471_04922/CAM_F0/0f180ae9d6415694.jpg'
+
+Set the environment variable HYDRA_FULL_ERROR=1 for a complete stack trace.

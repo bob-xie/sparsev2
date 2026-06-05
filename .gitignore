@@ -28,7 +28,6 @@ exp
 scripts_dev/*
 
 ckpt/
-dataset/
 exp/
 vis/
 
@@ -36,5 +35,6 @@ build/
 *.so
 
 maps/
-mini_navsim_logs/
+navsim_logs/
+sensor_blobs/
 mini_sensor_blobs/

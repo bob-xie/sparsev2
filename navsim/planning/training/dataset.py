@@ -141,6 +141,16 @@ class CacheOnlyDataset(torch.utils.data.Dataset):
 
 
 class Dataset(torch.utils.data.Dataset):
+    """
+    PyTorch数据集类，用于加载自动驾驶场景数据。
+    
+    支持两种模式：
+    1. 缓存模式：从预计算的缓存文件加载特征和目标
+    2. 实时计算模式：实时从原始数据计算特征和目标
+    
+    继承自 torch.utils.data.Dataset，可用于 PyTorch DataLoader。
+    """
+
     def __init__(
         self,
         scene_loader: SceneLoader,
@@ -151,19 +161,35 @@ class Dataset(torch.utils.data.Dataset):
         force_cache_computation: bool = False,
         cfg: Optional[DictConfig] = None,
     ):
+        """
+        初始化数据集。
+        
+        :param scene_loader: 场景加载器，负责加载场景数据
+        :param feature_builders: 特征构建器列表，用于提取输入特征
+        :param target_builders: 目标构建器列表，用于构建训练目标
+        :param test_mode: 是否为测试模式，影响数据处理流程
+        :param cache_path: 缓存目录路径，为None时不使用缓存
+        :param force_cache_computation: 是否强制重新计算缓存（覆盖已有缓存）
+        :param cfg: Hydra配置对象，包含额外的配置参数
+        """
         super().__init__()
-        self._scene_loader = scene_loader
-        self.test_mode = test_mode
-        self._feature_builders = feature_builders
-        self._target_builders = target_builders
+        
+        # 第155-158行：保存核心组件
+        self._scene_loader = scene_loader  # 场景加载器
+        self.test_mode = test_mode          # 测试模式标志
+        self._feature_builders = feature_builders  # 特征构建器列表
+        self._target_builders = target_builders    # 目标构建器列表
 
-        self._cache_path: Optional[Path] = Path(cache_path) if cache_path else None
-        self._force_cache_computation = force_cache_computation
+        # 第160-164行：缓存相关配置
+        self._cache_path: Optional[Path] = Path(cache_path) if cache_path else None  # 缓存路径
+        self._force_cache_computation = force_cache_computation  # 强制缓存标志
+        # 加载已有的有效缓存路径
         self._valid_cache_paths: Dict[str, Path] = self._load_valid_caches(
             self._cache_path, feature_builders, target_builders
         )
-        self._cfg = cfg
+        self._cfg = cfg  # 配置对象
 
+        # 第167-168行：如果指定了缓存路径，自动执行缓存
         if self._cache_path is not None:
             self.cache_dataset()
 
@@ -174,22 +200,28 @@ class Dataset(torch.utils.data.Dataset):
         target_builders: List[AbstractTargetBuilder],
     ) -> Dict[str, Path]:
         """
-        Helper method to load valid cache paths.
-        :param cache_path: directory of training cache folder
-        :param feature_builders: list of feature builders
-        :param target_builders: list of target builders
-        :return: dictionary of tokens and sample paths as keys / values
+        加载有效的缓存路径，验证每个场景的所有特征和目标文件是否都存在。
+        
+        :param cache_path: 训练缓存文件夹目录
+        :param feature_builders: 特征构建器列表
+        :param target_builders: 目标构建器列表
+        :return: 字典，键为场景token，值为该场景的缓存目录路径
         """
 
         valid_cache_paths: Dict[str, Path] = {}
 
+        # 只有当缓存路径存在且是目录时才加载
         if (cache_path is not None) and cache_path.is_dir():
+            # 遍历所有日志目录
             for log_path in cache_path.iterdir():
+                # 遍历每个日志目录下的场景token目录
                 for token_path in log_path.iterdir():
                     found_caches: List[bool] = []
+                    # 检查所有特征和目标构建器的缓存文件是否存在
                     for builder in feature_builders + target_builders:
                         data_dict_path = token_path / (builder.get_unique_name() + ".gz")
                         found_caches.append(data_dict_path.is_file())
+                    # 只有所有缓存文件都存在时，才认为该场景有效
                     if all(found_caches):
                         valid_cache_paths[token_path.name] = token_path
 
@@ -197,67 +229,89 @@ class Dataset(torch.utils.data.Dataset):
 
     def _cache_scene_with_token(self, token: str) -> None:
         """
-        Helper function to compute feature / targets and save in cache.
-        :param token: unique identifier of scene to cache
+        计算单个场景的特征和目标，并保存到缓存。
+        
+        :param token: 要缓存的场景唯一标识符
         """
 
+        # 从场景加载器获取场景对象
         scene = self._scene_loader.get_scene_from_token(token)
+        # 获取智能体输入数据
         agent_input = scene.get_agent_input()
 
+        # 构建缓存目录路径：cache_path/log_name/token/
         metadata = scene.scene_metadata
         token_path = self._cache_path / metadata.log_name / metadata.initial_token
-        os.makedirs(token_path, exist_ok=True)
+        os.makedirs(token_path, exist_ok=True)  # 创建目录（如果不存在）
 
+        # 计算并保存特征
         for builder in self._feature_builders:
             data_dict_path = token_path / (builder.get_unique_name() + ".gz")
-            data_dict = builder.compute_features(agent_input)
-            dump_feature_target_to_pickle(data_dict_path, data_dict)
+            data_dict = builder.compute_features(agent_input)  # 使用构建器计算特征sparsedrive_features.py
+            dump_feature_target_to_pickle(data_dict_path, data_dict)  # 保存到缓存
 
+        # 计算并保存目标
         for builder in self._target_builders:
             data_dict_path = token_path / (builder.get_unique_name() + ".gz")
+            # 合成场景不需要计算目标（用于warmup阶段）
             if token in self._scene_loader.synthetic_scenes:
                 data_dict = {}
             else:
-                data_dict = builder.compute_targets(scene, self._cfg)
-            dump_feature_target_to_pickle(data_dict_path, data_dict)
+                data_dict = builder.compute_targets(scene, self._cfg)  # 使用构建器计算目标
+            dump_feature_target_to_pickle(data_dict_path, data_dict)  # 保存到缓存
 
+        # 更新有效缓存路径字典
         self._valid_cache_paths[token] = token_path
 
     def _load_scene_with_token(self, token: str) -> Tuple[Dict[str, torch.Tensor], Dict[str, torch.Tensor]]:
         """
-        Helper function to load feature / targets from cache.
-        :param token:  unique identifier of scene to load
-        :return: tuple of feature and target dictionaries
+        从缓存加载单个场景的特征和目标。
+        
+        :param token: 要加载的场景唯一标识符
+        :return: 元组，包含特征字典和目标字典
         """
 
+        # 获取该场景的缓存路径
         token_path = self._valid_cache_paths[token]
 
+        # 加载特征
         features: Dict[str, torch.Tensor] = {}
         for builder in self._feature_builders:
             data_dict_path = token_path / (builder.get_unique_name() + ".gz")
-            data_dict = load_feature_target_from_pickle(data_dict_path)
-            features.update(data_dict)
+            data_dict = load_feature_target_from_pickle(data_dict_path)  # 从缓存加载
+            features.update(data_dict)  # 合并到特征字典
 
+        # 加载目标
         targets: Dict[str, torch.Tensor] = {}
         for builder in self._target_builders:
             data_dict_path = token_path / (builder.get_unique_name() + ".gz")
-            data_dict = load_feature_target_from_pickle(data_dict_path)
-            targets.update(data_dict)
+            data_dict = load_feature_target_from_pickle(data_dict_path)  # 从缓存加载
+            targets.update(data_dict)  # 合并到目标字典
 
         return (features, targets)
 
     def cache_dataset(self) -> None:
-        """Caches complete dataset into cache folder."""
+        """
+        将整个数据集缓存到缓存文件夹。
+        
+        如果force_cache_computation=True，则重新计算所有场景；
+        否则只计算尚未缓存的场景。
+        """
 
+        # 确保缓存路径已设置
         assert self._cache_path is not None, "Dataset did not receive a cache path!"
+        # 创建缓存目录（如果不存在）
         os.makedirs(self._cache_path, exist_ok=True)
 
-        # determine tokens to cache
+        # 确定需要缓存的场景token
         if self._force_cache_computation:
+            # 强制重新计算所有场景
             tokens_to_cache = self._scene_loader.tokens
         else:
+            # 只计算尚未缓存的场景（集合差集）
             tokens_to_cache = set(self._scene_loader.tokens) - set(self._valid_cache_paths.keys())
             tokens_to_cache = list(tokens_to_cache)
+            # 打印日志信息
             logger.info(
                 f"""
                 Starting caching of {len(tokens_to_cache)} tokens.
@@ -266,45 +320,61 @@ class Dataset(torch.utils.data.Dataset):
                 """
             )
 
+        # 遍历所有需要缓存的场景，显示进度条
         for token in tqdm(tokens_to_cache, desc="Caching Dataset"):
             self._cache_scene_with_token(token)
 
     def __len__(self) -> None:
         """
-        :return: number of samples to load
+        返回数据集的样本数量。
+        
+        :return: 样本数量
         """
+        # 直接委托给场景加载器
         return len(self._scene_loader)
 
     def __getitem__(self, idx: int) -> Tuple[Dict[str, torch.Tensor], Dict[str, torch.Tensor], str]:
         """
-        Get features or targets either from cache or computed on-the-fly.
-        :param idx: index of sample to load.
-        :return: tuple of feature and target dictionary
+        根据索引获取样本。
+        
+        如果配置了缓存路径，则从缓存加载；否则实时计算。
+        
+        :param idx: 样本索引
+        :return: 元组，包含特征字典、目标字典和场景token
         """
 
+        # 获取指定索引的场景token
         token = self._scene_loader.tokens[idx]
         features: Dict[str, torch.Tensor] = {}
         targets: Dict[str, torch.Tensor] = {}
 
+        # 判断是否使用缓存
         if self._cache_path is not None:
+            # 确保该场景已缓存
             assert (
                 token in self._valid_cache_paths.keys()
             ), f"The token {token} has not been cached yet, please call cache_dataset first!"
 
+            # 从缓存加载特征和目标
             features, targets = self._load_scene_with_token(token)
         else:
+            # 实时计算特征和目标（不使用缓存）
             scene = self._scene_loader.get_scene_from_token(self._scene_loader.tokens[idx])
             agent_input = scene.get_agent_input()
+            # 计算特征
             for builder in self._feature_builders:
                 features.update(builder.compute_features(agent_input))
+            # 计算目标（合成场景除外）
             for builder in self._target_builders:
                 if token in self._scene_loader.synthetic_scenes:
                     targets.update({})
                 else:
                     targets.update(builder.compute_targets(scene, self._cfg))
 
+        # 如果特征构建器有pipeline方法，执行额外处理（如数据增强、归一化等）
         if hasattr(self._feature_builders[0], 'pipeline'):
             features, targets, token = self._feature_builders[0].pipeline(features, targets, token, self.test_mode)
         
+        # 添加token路径到目标字典（用于后续处理或调试）
         targets['token_path'] = str(self._valid_cache_paths[token])
         return (features, targets, token)
