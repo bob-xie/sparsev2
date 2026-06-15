@@ -27,11 +27,11 @@ from tqdm import tqdm
 from navsim.planning.training.dataset import load_feature_target_from_pickle
 
 # ==================== 聚类数量配置 ====================
-K_PATH = 1024  # 路径聚类的数量，生成1024条代表性路径
-K_VELOCITY = 256  # 速度聚类的数量，生成256种代表性速度序列
+K_PATH = 100  # 路径聚类的数量，生成1024条代表性路径
+K_VELOCITY = 50  # 速度聚类的数量，生成256种代表性速度序列
 
 # ==================== 路径配置 ====================
-CACHE_PATH = "exp/data_cache_navtrain"  # 训练数据缓存目录路径
+CACHE_PATH = "exp/data_cache_navmini"  # 训练数据缓存目录路径
 VIS_DIR = "vis"  # 可视化图像输出目录
 CKPT_DIR = "ckpt/kmeans"  # 聚类结果（词汇表）保存目录
 DT = 0.5  # 时间间隔（秒），与轨迹采样间隔一致，每0.5秒一个速度值
@@ -356,7 +356,7 @@ def main():
     6. 保存词汇表
     """
     # ==================== 步骤1: 加载训练数据 ====================
-    # 并行加载所有场景的路径和速度数据
+    # 并行加载所有场景的路径和速度数据 Dict[str, torch.Tensor]
     paths, velocities = load_all_parallel(CACHE_PATH, LOG_NAMES, max_workers=64)
     #训练数据的路径数量 N 远大于 1024
     # 打印加载的样本数量
@@ -365,20 +365,28 @@ def main():
     # ==================== 步骤2: 路径K-Means聚类 ====================
     #_get_future_path  path 是按**距离间隔**均匀采样的，而非时间间隔
     num_pts = paths[0].shape[0]  # 获取路径点数量（默认50）
+    print("len(paths):{}, num_pts:{}, paths【0】:shape:", len(paths), num_pts, paths[0].shape)
     # 将路径展平：形状从 [N, 50, 3] 变为 [N, 150]
     # 其中150 = 50点 × 3坐标(x,y,heading)
-    paths_flatten = np.stack(paths).reshape(len(paths), -1)
+    paths_flatten = np.stack(paths).reshape(len(paths), -1) #paths 是一个列表，np.stack(paths)一个形状为 [N, 50, 3] 的三维数组
+    print("paths_flatten:", paths_flatten.shape)
     # 执行K-Means聚类，n_clusters=K_PATH=1024
     path_cluster = KMeans(n_clusters=K_PATH).fit(paths_flatten).cluster_centers_
+    print("path_cluster:", path_cluster.shape)
     # 恢复形状：形状从 [1024, 150] 变为 [1024, 50, 3]
     path_cluster = path_cluster.reshape(K_PATH, num_pts, 3)
+    print("path_cluster:", path_cluster.shape)
     # 将heading标准化到 [-π, π)
     path_cluster[:, :, 2] = (path_cluster[:, :, 2] + np.pi) % (2 * np.pi) - np.pi
 
     # ==================== 步骤3: 速度K-Means聚类 ====================
     #velocity = torch.norm(pad_trajectory[1:] - pad_trajectory[:-1], dim=-1) / self._config.vel_time_interval
     # 将速度列表堆叠为数组：形状 [N, 8]
+    print("velocities【0】:shape:", velocities[0].shape)
     velocities = np.stack(velocities)
+    print("velocities:", velocities.shape)
+    print("velocities:", velocities[0])
+
     # 执行K-Means聚类，n_clusters=K_VELOCITY=256
     velocity_cluster = KMeans(n_clusters=K_VELOCITY).fit(velocities).cluster_centers_
 
