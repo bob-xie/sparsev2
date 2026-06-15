@@ -272,6 +272,15 @@ def visualize(path_cluster: np.ndarray, velocity_cluster: np.ndarray, trajectory
     plt.close()  # 关闭当前图像，释放内存
 
     # ==================== 可视化速度聚类 ====================
+    # 打印速度序列信息
+    print(f"\n=== Velocity Clusters ({K_VELOCITY} sequences, each with {velocity_cluster.shape[1]} timesteps) ===")
+    for idx in range(K_VELOCITY):
+        seq = velocity_cluster[idx]
+        avg_speed = np.mean(seq)
+        max_speed = np.max(seq)
+        print(f"  Sequence {idx:3d}: {seq.round(2)} | avg={avg_speed:.2f} m/s | max={max_speed:.2f} m/s")
+    print(f"  ... total {K_VELOCITY} sequences")
+    
     num_velocity = velocity_cluster.shape[1]  # 速度序列长度，默认8
     # 使用Spectral色谱生成颜色
     colors = plt.cm.Spectral(np.linspace(0, 1, num_velocity))
