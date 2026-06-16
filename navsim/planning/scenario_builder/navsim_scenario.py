@@ -64,7 +64,7 @@ class NavSimScenario(AbstractScenario):
 
         self._initial_lidar_token = self._scene.frames[self._initial_frame_idx].token
         self._log_name = self._scene_data.log_name
-        self._route_roadblock_ids = self._scene.frames[self._initial_frame_idx].roadblock_ids
+        self._route_roadblock_ids = self._scene.frames[self._initial_frame_idx].roadblock_ids #车辆需要经过的 roadblock ID 序列
 
         self._time_points = [TimePoint(int(frame.timestamp)) for frame in self._scene.frames]
         self._future_sampling = TrajectorySampling(num_poses=len(self._time_points) + 1, interval_length=0.5)
@@ -84,7 +84,7 @@ class NavSimScenario(AbstractScenario):
                 self._ego_vehicle_parameters,
             ),
         )
-
+#使用 @property obj.map_api （像访问属性一样调用，不需要括号）
     @property
     def ego_vehicle_parameters(self) -> VehicleParameters:
         """Inherited, see superclass."""
