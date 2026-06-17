@@ -170,8 +170,8 @@ class TrajectoryHead(nn.Module):
             torch.from_numpy(trajectory_data["trajectory"]).float(),
             requires_grad=False
         )
-        │#- trajectory: 组合轨迹 [1024, 256, 8, 3]                         │
-│        #- trajectory_mask: 有效掩码 [1024, 256, 8]  
+        #- trajectory: 组合轨迹 [1024, 256, 8, 3]
+        #- trajectory_mask: 有效掩码 [1024, 256, 8]  
         # 轨迹掩码，标记有效轨迹点
         # [K_PATH, K_VELOCITY, num_poses]
         #trajectory_mask[i, j] = [1, 1, 1, 1, 0, 0, 0, 0]（后4个点无效）
