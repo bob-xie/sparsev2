@@ -118,7 +118,7 @@ def main(cfg: DictConfig) -> None:
     )
 
     # 判断是否使用缓存模式加载数据（跳过SceneLoader构建）
-    if cfg.use_cache_without_dataset:                                       # use_cache_without_dataset: 布尔值，是否使用纯缓存模式
+    if cfg.use_cache_without_dataset:                                       # use_cache_without_dataset: True布尔值，是否使用纯缓存模式
         # 缓存模式：直接从缓存目录加载预计算的特征和目标
         logger.info("Using cached data without building SceneLoader")
         
