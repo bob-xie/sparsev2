@@ -70,7 +70,7 @@ class SparseBackbone(nn.Module):
             pretrained=True,            # 使用预训练权重
             features_only=True,         # 仅输出特征图，不输出分类结果
             pretrained_cfg_overlay=dict(file=config.bkb_path),  # 指定预训练权重路径
-            out_indices=(1, 2, 3, 4)[-config.num_levels:]  # 输出哪些层的特征（默认取最后4层）
+            out_indices=(1, 2, 3, 4)[-config.num_levels:]  # 输出哪些层的特征（默认取最后4层）num_levels=4 时有4个不同尺度的特征图
         )
         
         # 如果启用 FPN Neck
@@ -111,7 +111,7 @@ class SparseBackbone(nn.Module):
             img = self.grid_mask(img)
         
         # 使用 ResNet-34 提取特征
-        # 输出为列表，包含多个尺度的特征图：
+        # 64, 128, 256, 512 是 ResNet-34 架构的固有设计，对应于4层的特征图：
         # - feature_maps[0]: [B×C, 64, H/4, W/4]
         # - feature_maps[1]: [B×C, 128, H/8, W/8]
         # - feature_maps[2]: [B×C, 256, H/16, W/16]
