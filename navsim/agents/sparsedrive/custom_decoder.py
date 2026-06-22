@@ -356,7 +356,7 @@ class CustomTransformerDecoderLayer(nn.Module):
 
         # ==================== Ego状态注入 ====================
         # 将Ego状态编码广播后添加到每个路径/速度嵌入中
-        # status_encoding: [B, d_model] → [B, 1, d_model] → 广播到 [B, K_path/K_vel, d_model]
+        # status_encoding: [B, d_model] → [B, 1, d_model] → 广播到 [B, K_path/K_vel, d_model]意思是把
         path_embed = path_embed + status_encoding.unsqueeze(1)
         vel_embed = vel_embed + status_encoding.unsqueeze(1)
 
