@@ -47,6 +47,7 @@ class SparseDriveFeatureBuilder(AbstractFeatureBuilder):
         features = {}
 
         features["camera_feature"] = self._get_camera_feature(agent_input)
+        #torch.concatenate 默认在 第0维（dim=0） 上拼接，也就是 水平拼接 （将向量首尾相连）。
         features["status_feature"] = torch.concatenate(
             [
                 torch.tensor(agent_input.ego_statuses[-1].driving_command, dtype=torch.float32),
@@ -54,7 +55,9 @@ class SparseDriveFeatureBuilder(AbstractFeatureBuilder):
                 torch.tensor(agent_input.ego_statuses[-1].ego_acceleration, dtype=torch.float32),
             ],
         )
-
+        # 假设 batch_size = 2
+        #batch_status = torch.stack([status_feature_sample1, status_feature_sample2])
+        # shape: [2, 8]
         return features
 
     def _get_camera_feature(self, agent_input: AgentInput) -> torch.Tensor:
@@ -82,13 +85,21 @@ class SparseDriveFeatureBuilder(AbstractFeatureBuilder):
         camera_features = features["camera_feature"]
 
         ## only last frame used
+         # 1. 只使用最后一帧（当前帧）
         frame_info = camera_features[-1]
+        # 2. 提取相机参数（内参、外参、投影矩阵）
         results = self.get_camera_params(frame_info)
+         # 3. 从文件加载图像
         results = self.load_images(results)
+        # 4. 几何变换（调整大小、裁剪、翻转）
         results = self.resize_crop_flip_img(results, test_mode)
+         # 5. 自车旋转增强（训练时随机旋转）
         results, targets = self.ego_rotation(results, targets, test_mode)
+        # 6. 光度畸变（亮度、对比度、饱和度、色调变化）
         results = self.photo_metric_distortion(results, test_mode)
+        # 7. 归一化（减去均值，除以标准差）
         results = self.normalize_img(results)
+        # 8. 转换为张量格式
         results = self.data_adapter(results)
 
         features["camera_feature"] = results
@@ -147,8 +158,8 @@ class SparseDriveFeatureBuilder(AbstractFeatureBuilder):
         imgs = [np.array(Image.open(str(image_path))) for image_path in image_paths]
         if self._config.to_bgr:
             imgs = [cv2.cvtColor(img, cv2.COLOR_RGB2BGR) for img in imgs]
-        results["imgs"] = imgs
-        results["img_shape"] = [x.shape[:2] for x in imgs]
+        results["imgs"] = imgs # 2. 存储加载的图像数组 每个元素是 [H, W, 3] 的 numpy array 
+        results["img_shape"] = [x.shape[:2] for x in imgs] # 3. 存储每张图像的形状（高度和宽度）
         return results
 
     def resize_crop_flip_img(self, results, test_mode):
@@ -407,7 +418,7 @@ class SparseDriveFeatureBuilder(AbstractFeatureBuilder):
         results.pop("image_paths")
         for key in ['distortions', 'lidar2img', 'lidar2cam', 'cam2lidar', 'cam_intrinsic']:
             results[key] = torch.tensor(np.stack(results[key]))
-
+    # 图像转换为张量：[num_cams, H, W, 3] → [num_cams, 3, H, W]  所有图像 
         imgs = [img.transpose(2, 0, 1) for img in results["imgs"]]
         imgs = np.ascontiguousarray(np.stack(imgs, axis=0))
         imgs = torch.tensor(imgs)

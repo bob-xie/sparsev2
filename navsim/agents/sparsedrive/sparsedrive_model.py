@@ -221,7 +221,7 @@ class TrajectoryHead(nn.Module):
         
         # 速度词汇表: [K_VELOCITY, len_vel_seq] -> [B, K_VELOCITY, len_vel_seq]
         vel_vocab = self.vel_vocab.data[None].repeat(B, 1, 1)
-        
+        # [None] 在第0维添加一个维度  第0维重复 B 次（batch size）
         # 轨迹词汇表: [K_PATH, K_VELOCITY, num_poses, 3] -> [B, K_PATH, K_VELOCITY, num_poses, 3]
         traj_vocab = self.traj_vocab.data[None].repeat(B, 1, 1, 1, 1)
         

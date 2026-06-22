@@ -29,6 +29,7 @@ class AgentLightningModule(pl.LightningModule):
         """
         features, targets, token = batch
         targets["token"] = token
+        #-> Dict[str, torch.Tensor] 返回值类型注解，表示返回一个字典
         prediction = self.agent.forward(features, targets)
         loss_dict = self.agent.compute_loss(features, targets, prediction)
         for k, v in loss_dict.items():
