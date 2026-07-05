@@ -31,7 +31,18 @@ from navsim.traffic_agents_policies.abstract_traffic_agents_policy import Abstra
 
 from .pdm_score_v2 import pdm_score
 
+
 def _init_pool():
+    """
+    进程池初始化函数，在每个子进程启动时执行一次
+    
+    功能：初始化PDM仿真器、评分器和交通代理策略，作为全局变量供子进程使用
+    
+    全局变量：
+    - SIMULATOR: PDMSimulator实例，用于轨迹仿真
+    - SCORER: PDMScorer实例，用于计算轨迹评分
+    - TRAFFIC_AGENT_POLICY: 交通代理策略，用于模拟其他车辆行为
+    """
     global SIMULATOR, SCORER, TRAFFIC_AGENT_POLICY
     pdm_cfg = OmegaConf.load('navsim/planning/script/config/pdm_scoring/run_pdm_train.yaml')
     SIMULATOR = instantiate(pdm_cfg.simulator)
@@ -41,6 +52,7 @@ def _init_pool():
         pdm_cfg.non_reactive, SIMULATOR.proposal_sampling
     )
 
+
 _pdm_pool = cf.ProcessPoolExecutor(
     max_workers=16,
     mp_context=mp.get_context("spawn"),
@@ -48,6 +60,22 @@ _pdm_pool = cf.ProcessPoolExecutor(
 )
 
 def get_pdm_score_para(trajectory, metric_cache_path):
+    """
+    使用多进程并行计算PDM轨迹评分
+    
+    参数：
+    - trajectory: torch.Tensor，形状 [B, G, T, C]
+                  B: batch size（批次大小）
+                  G: 轨迹候选数量（如200条候选轨迹）
+                  T: 轨迹时间步数（如8个时间点）
+                  C: 轨迹维度（3，包含 x, y, heading）
+    - metric_cache_path: List[str]，长度为B
+                         每个元素是一个lzma压缩的pickle文件路径，包含该样本的度量缓存
+    
+    返回：
+    - sub_scores: List[PDMResults]，长度为B
+                   每个元素是一个PDMResults对象，包含该样本所有轨迹候选的评分结果
+    """
     B, G = trajectory.shape[:2]
     traj_np = trajectory.detach().cpu().numpy()
 
@@ -85,7 +113,20 @@ def get_pdm_score_para(trajectory, metric_cache_path):
     sub_scores  = [f.result() for f in futures]
     return sub_scores
 
+
 def _pdm_worker(args):
+    """
+    进程池工作函数，处理单个样本的PDM评分计算
+    
+    参数：
+    - args: Tuple[str, np.ndarray]
+            - cache: str，度量缓存文件路径（.xz格式）
+            - traj_np: np.ndarray，形状 [G, T, C]
+                       单个样本的G条候选轨迹
+    
+    返回：
+    - results: PDMResults对象，包含G条轨迹的评分结果
+    """
     cache, traj_np = args
     with lzma.open(cache, "rb") as f:
         metric_cache = pickle.load(f)

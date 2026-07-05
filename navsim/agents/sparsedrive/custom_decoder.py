@@ -364,7 +364,7 @@ class CustomTransformerDecoderLayer(nn.Module):
         #path_vocab  [B, K_path, len_path, 3]
         # 将路径坐标展平：[B, K_path, len_path, 2] → [B, K_path, len_path*2=100]
         # 只取x, y坐标，忽略heading用于投影 取最后一个维度的前两个元素（x, y坐标，忽略heading）
-        path_vocab_flat = path_vocab[..., :2].flatten(-2)
+        path_vocab_flat = path_vocab[..., :2].flatten(-2) #从 倒数第二个维度 开始展平，到最后一个维度结束
         # 可变形特征聚合：将3D路径点投影到图像平面，聚合多视角多尺度特征
         # 输入: path_embed [B, K_path, 256], path_vocab_flat [B, K_path, 100]
         # 输出: path_embed [B, K_path, 256]（更新后的嵌入）
@@ -380,9 +380,12 @@ class CustomTransformerDecoderLayer(nn.Module):
         path_embed = path_embed + self.p_dropout1(self.p_attention(path_embed, path_embed, path_embed)[0])
         path_embed = self.p_norm1(path_embed)
         # FFN + 残差连接：非线性变换
+        # 前馈层（FFN）在Transformer模型中的作用是对每个位置的词向量进行独立的非线性变换。
+        # 尽管注意力机制能够捕捉序列中的全局依赖，但前馈层通过增加模型的深度和复杂度，为模型引入必要的非线性，
+        # 从而增强模型的表达能力。每个编码器和解码器层都包含一个FFN，它对所有位置的表示进行相同的操作，但并不共享参数。
         path_embed = path_embed + self.p_dropout2(self.p_ffn(path_embed))
         path_embed = self.p_norm2(path_embed)
-        # 路径评分：[B, K_path, 256] → [B, K_path, 1] → [B, K_path]
+        # 路径评分：[B, K_path, 256] → [B, K_path, 1] → [B, K_path] # 移除最后一个维度，总大小不变，方便torch.topk筛选
         # 每个路径词汇的得分，用于后续Top-K筛选
         path_scores = self.path_mlp(path_embed).squeeze(-1)
 
@@ -479,7 +482,7 @@ class CustomTransformerDecoderLayer(nn.Module):
             target_path_mask = targets["path_mask"] # [B, 50]
             
             # 计算每个路径词汇与目标路径的距离（仅x, y）
-            # [B, K_path, 50, 2] - [B, 1, 50, 2] → [B, K_path, 50, 2]
+            # [B, K_path, 50, 3] - [B, 1, 50, 3] → [B, K_path, 50, 2]
             diff = (path_vocab - target_path[:, None])[..., :2]
             dist = diff.pow(2).sum(-1)  # [B, K_path, 50] - 逐点距离
             mask = target_path_mask[:, None].float()  # [B, 1, 50]
