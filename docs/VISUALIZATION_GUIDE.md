@@ -55,11 +55,15 @@ python scripts/visualization/visualize_trajectory.py \
 
 ### 示例
 
-```
-source /home/xqb/DATA2/E2E_Project/sparsev2/scripts/cache/path_export.sh && source /home/xqb/DATA2/E2E_Project/miniconda3/etc/profile.d/conda.sh && conda activate navsim && cd /home/xqb/DATA2/E2E_Project/sparsev2 && python visualize_trajectory_simple.py train_test_split=navmini agent=sparsedrive_agent experiment_name=visualization +visualization.token=6774548111cb5ba4 +visualization.ckpt=exp/sparsedrive_agent/2026.06.17.17.46.52/periodic_pdm_ckpts/ep0010.ckpt
-```
-
 ```bash
+# 激活 conda 环境
+source /home/xqb/DATA2/E2E_Project/sparsev2/scripts/cache/path_export.sh && source /home/xqb/DATA2/E2E_Project/miniconda3/etc/profile.d/conda.sh && conda activate navsim && cd /home/xqb/DATA2/E2E_Project/sparsev2 
+
+# 运行场景可视化
+python scripts/visualization/visualize_trajectory.py \
+    --token 6774548111cb5ba4 \
+    --ckpt exp/sparsedrive_agent/2026.06.17.17.46.52/periodic_pdm_ckpts/ep0010.ckpt \
+    --output exp/visualization/trajectory
 ```
 
 ### 输出结果
@@ -290,4 +294,31 @@ conda activate navsim
 | `camera.py` | 摄像头图像绘制   |
 | `lidar.py`  | LiDAR点云绘制 |
 | `config.py` | 可视化配置参数   |
+
+<br />
+
+### 1. 轨迹对比可视化
+
+- 脚本 : visualize\_trajectory\_simple.py
+- 输出 :
+  - exp/visualization/trajectory/trajectory\_1fc1dd0dc3d157ae.png (75KB)
+  - exp/visualization/trajectory/trajectory\_1fc1dd0dc3d157ae.gif (176KB)
+- 内容 : BEV鸟瞰图中对比人类轨迹（红色）和模型预测轨迹（蓝色）
+
+### 2. 场景可视化
+
+- 脚本 : visualize\_scene\_simple.py
+- 输出 :
+  - exp/visualization/scene/bev\_6774548111cb5ba4.png (70KB) - BEV鸟瞰图
+  - exp/visualization/scene/cameras\_6774548111cb5ba4.png (2.5MB) - 8摄像头+BEV全景图
+  - exp/visualization/scene/cameras\_lidar\_6774548111cb5ba4.png (2.9MB) - 摄像头+LiDAR投影
+  - exp/visualization/scene/cameras\_annotations\_6774548111cb5ba4.png (2.5MB) - 摄像头+标注框
+  - exp/visualization/scene/bev\_animation\_6774548111cb5ba4.gif (241KB) - BEV动画
+
+### 3. 训练结果可视化
+
+- 脚本 : scripts/visualization/visualize\_training.py
+- 输出 :
+  - exp/visualization/training/loss\_curves.png (256KB) - 损失曲线
+  - exp/visualization/training/metric\_curves.png (33KB) - 指标曲线
 

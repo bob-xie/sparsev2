@@ -49,14 +49,22 @@ def load_agent(ckpt_path: str, cfg: dict) -> SparseDriveAgent:
 
 def main():
     """主函数"""
+    import argparse
+    
+    parser = argparse.ArgumentParser(description='轨迹对比可视化')
+    parser.add_argument('--token', required=True, help='场景 token')
+    parser.add_argument('--ckpt', default="exp/sparsedrive_agent/2026.06.17.17.46.52/periodic_pdm_ckpts/ep0010.ckpt", help='模型 checkpoint 路径')
+    parser.add_argument('--output', default="exp/visualization/trajectory", help='输出目录')
+    args = parser.parse_args()
+    
     os.environ['OPENSCENE_DATA_ROOT'] = '/home/xqb/DATA2/E2E_Project/sparsev2'
     os.environ['NAVSIM_DEVKIT_ROOT'] = '/home/xqb/DATA2/E2E_Project/sparsev2'
     os.environ['NAVSIM_EXP_ROOT'] = '/home/xqb/DATA2/E2E_Project/sparsev2/exp'
     os.environ['NUPLAN_MAPS_ROOT'] = '/home/xqb/DATA2/E2E_Project/sparsev2/maps/nuplan-maps-v1.0'
     
-    token = "1fc1dd0dc3d157ae"
-    ckpt_path = "exp/sparsedrive_agent/2026.06.17.17.46.52/periodic_pdm_ckpts/ep0010.ckpt"
-    output_dir = "exp/visualization/trajectory"
+    token = args.token
+    ckpt_path = args.ckpt
+    output_dir = args.output
     
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
