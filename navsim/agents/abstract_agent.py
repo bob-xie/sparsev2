@@ -77,7 +77,7 @@ class AbstractAgent(torch.nn.Module, ABC):
 
         # forward pass
         with torch.no_grad():
-            predictions = self.forward(features)
+            predictions = self.forward(features) #SparseDriveModel.forward() → sparsedrive_model.py:73-116
             poses = predictions["trajectory"].squeeze(0).numpy()
 
         # extract trajectory

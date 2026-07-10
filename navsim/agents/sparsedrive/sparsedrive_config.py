@@ -52,6 +52,7 @@ class SparseDriveConfig:
     # deformable
     fix_height: List[float] = (0., -0.25, -0.5, 0.25, 0.5)
     num_learnable_pts: int = 2
+    use_deformable_func: bool = True
 
     # metric supervision
     dataset_version: str = "v2"

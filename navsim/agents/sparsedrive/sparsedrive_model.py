@@ -1,4 +1,4 @@
-from typing import Dict
+from typing import Dict, Optional
 import numpy as np
 import torch
 import torch.nn as nn
@@ -70,14 +70,14 @@ class SparseDriveModel(nn.Module):
             config=config,                                   # 完整配置对象
         )
 
-    def forward(self, features: Dict[str, torch.Tensor], targets: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+    def forward(self, features: Dict[str, torch.Tensor], targets: Optional[Dict[str, torch.Tensor]] = None) -> Dict[str, torch.Tensor]:
         """
         模型前向传播，定义完整的计算流程。
         
         :param features: 输入特征字典，包含：
                          - camera_feature: 相机图像特征（多视角图像及投影参数）
                          - status_feature: ego状态特征（驾驶命令、速度、加速度）
-        :param targets: 目标标签字典，用于训练时的损失计算
+        :param targets: 目标标签字典，用于训练时的损失计算，推理时可为None
         :return: (output, loss_dict) - 输出字典和损失字典
         """
         # 1. 提取输入特征

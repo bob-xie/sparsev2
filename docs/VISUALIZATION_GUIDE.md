@@ -14,9 +14,10 @@
 
 ```
 scripts/visualization/
-├── visualize_trajectory.py    # 轨迹对比可视化
-├── visualize_scene.py         # 场景可视化
-└── visualize_training.py      # 训练结果可视化
+├── visualize_trajectory.py              # 单帧轨迹对比可视化
+├── visualize_trajectory_sequence.py     # 时间序列轨迹对比可视化
+├── visualize_scene.py                   # 场景可视化
+└── visualize_training.py                # 训练结果可视化
 ```
 
 ***
@@ -79,6 +80,94 @@ python scripts/visualization/visualize_trajectory.py \
 - **红色线**：模型预测轨迹
 - **绿色点**：当前帧位置
 - **灰色区域**：可行驶区域
+
+***
+
+## 1.1 时间序列轨迹对比可视化
+
+### 用途
+
+在场景的每个时间步使用当前帧的输入来预测未来轨迹，展示模型在整个场景中的预测能力演变过程。与单帧可视化不同，此脚本生成一段连续的时间序列动画，便于观察模型预测的动态变化。
+
+### 使用时机
+
+- **训练完成后**：评估模型在整个场景时间序列上的预测一致性
+- **推理阶段**：查看模型对特定场景的动态预测效果
+- **调试阶段**：分析模型在不同时刻的预测偏差
+
+### 使用方式
+
+```bash
+# 激活 conda 环境
+conda activate navsim
+
+# 运行时间序列轨迹对比可视化
+python scripts/visualization/visualize_trajectory_sequence.py \
+    --token <场景token> \
+    --ckpt <模型checkpoint路径> \
+    --output <输出目录> \
+    [--start-frame <起始帧>] \
+    [--end-frame <结束帧>]
+```
+
+### 参数说明
+
+| 参数           | 必选 | 说明                                     |
+| ------------ | -- | -------------------------------------- |
+| `--token`    | 是  | 场景的唯一标识符（16位字符串）                       |
+| `--ckpt`     | 是  | 训练好的模型 checkpoint 路径                   |
+| `--output`   | 否  | 输出目录，默认 `exp/visualization/trajectory_sequence` |
+| `--start-frame` | 否  | 起始帧索引，默认使用最后一帧历史帧（索引3）              |
+| `--end-frame` | 否  | 结束帧索引，默认使用场景最后一帧                      |
+
+### 示例
+
+```bash
+# 激活环境并运行
+source /home/xqb/DATA2/E2E_Project/sparsev2/scripts/cache/path_export.sh && source /home/xqb/DATA2/E2E_Project/miniconda3/etc/profile.d/conda.sh && conda activate navsim && cd /home/xqb/DATA2/E2E_Project/sparsev2
+
+# 运行时间序列轨迹对比可视化
+python scripts/visualization/visualize_trajectory_sequence.py \
+    --token 6774548111cb5ba4 \
+    --ckpt exp/sparsedrive_agent/2026.06.17.17.46.52/periodic_pdm_ckpts/ep0010.ckpt \
+    --output exp/visualization/trajectory_sequence
+```
+
+### 输出结果
+
+| 文件                                       | 说明                                   |
+| ---------------------------------------- | ------------------------------------ |
+| `trajectory_sequence_summary_{token}.png` | 时间序列轨迹汇总图（所有帧预测轨迹叠加）               |
+| `trajectory_sequence_{token}.gif`         | 时间序列轨迹动画（至少5秒，展示预测轨迹随时间演变）          |
+| `trajectory_frame_{frame_idx}_{token}.png` | 逐帧预测轨迹图（每个时间步单独保存一张图）              |
+
+### 可视化内容
+
+**汇总图**：
+- **黑色线**：历史轨迹（已行驶路径）
+- **蓝色点**：所有帧的人类未来轨迹（ground truth）
+- **红色点**：所有帧的模型预测轨迹
+
+**动画和逐帧图**：
+- **蓝色线**：当前帧的人类未来轨迹（ground truth）
+- **红色线**：当前帧的模型预测轨迹
+- **绿色点**：当前帧位置
+- **灰色区域**：可行驶区域
+
+### 时间序列说明
+
+```
+场景帧序列: [frame_0, frame_1, frame_2, frame_3, frame_4, ..., frame_13]
+              ↓         ↓         ↓         ↓         ↓
+           历史帧1   历史帧2   历史帧3   当前帧    未来帧1
+                                         ↓
+                                   模型在此帧预测未来轨迹
+                                      ↓
+                    预测: [frame_4, frame_5, ..., frame_13]
+                    
+时间序列可视化会在每个帧位置（frame_3 ~ frame_13）进行预测，
+展示模型从不同位置出发的预测能力。
+```
 
 ***
 

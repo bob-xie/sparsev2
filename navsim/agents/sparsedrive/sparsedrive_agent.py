@@ -1,6 +1,7 @@
 from typing import Any, List, Dict, Optional, Union
 import os
 
+import numpy as np
 import torch
 import torch.nn.functional as F
 from torch.optim import Optimizer
@@ -10,7 +11,7 @@ from pytorch_lightning.callbacks import ModelCheckpoint, LearningRateMonitor
 
 from nuplan.planning.simulation.trajectory.trajectory_sampling import TrajectorySampling
 from navsim.agents.abstract_agent import AbstractAgent
-from navsim.common.dataclasses import SensorConfig
+from navsim.common.dataclasses import SensorConfig, AgentInput, Trajectory
 from navsim.planning.training.abstract_feature_target_builder import AbstractFeatureBuilder, AbstractTargetBuilder
 
 from .sparsedrive_config import SparseDriveConfig
@@ -139,15 +140,47 @@ class SparseDriveAgent(AbstractAgent):
         """
         return [SparseDriveFeatureBuilder(config=self._config)]
 
-    def forward(self, features: Dict[str, torch.Tensor], targets: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+    def forward(self, features: Dict[str, torch.Tensor], targets: Optional[Dict[str, torch.Tensor]] = None) -> Dict[str, torch.Tensor]:
         """
         前向传播方法，定义模型的计算流程。
         
         :param features: 输入特征字典，包含相机图像和ego状态
-        :param targets: 目标标签字典，用于训练时的损失计算
+        :param targets: 目标标签字典，用于训练时的损失计算，推理时可为None
         :return: 预测结果和损失字典
         """
+        if targets is None:
+            targets = {}
         return self._sparsedrive_model(features, targets)
+
+    def compute_trajectory(self, agent_input: AgentInput) -> Trajectory:
+        """
+        重写父类方法，处理 camera_feature 为 list 的情况。
+        """
+        self.eval()
+        device = next(self.parameters()).device
+        
+        features: Dict[str, torch.Tensor] = {}
+        for builder in self.get_feature_builders():
+            features.update(builder.compute_features(agent_input))
+        
+        builder = self.get_feature_builders()[0]
+        features, _, _ = builder.pipeline(features, {}, "", test_mode=True)
+        
+        features["status_feature"] = features["status_feature"].unsqueeze(0).to(device)
+        
+        for key in features["camera_feature"]:
+            val = features["camera_feature"][key]
+            if isinstance(val, torch.Tensor):
+                features["camera_feature"][key] = val.unsqueeze(0).to(device)
+            elif isinstance(val, np.ndarray):
+                features["camera_feature"][key] = torch.tensor(val).unsqueeze(0).to(device)
+        
+        with torch.no_grad():
+            predictions = self.forward(features)
+            output = predictions[0] if isinstance(predictions, tuple) else predictions
+            poses = output["trajectory"].squeeze(0).cpu().numpy()
+        
+        return Trajectory(poses, self._trajectory_sampling)
 
     def compute_loss(
         self,

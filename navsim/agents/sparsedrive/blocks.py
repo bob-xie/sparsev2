@@ -276,6 +276,38 @@ class DeformableFeatureAggregation(nn.Module):
             # 对所有关键点特征求和，得到每个锚点的聚合特征
             features = features.sum(dim=2)
         
+        else:
+            # 使用纯 PyTorch 实现的特征采样和融合
+            # 获取原始多尺度特征图（不是 deformable_format 展平后的版本）
+            original_feature_maps = metas["feature_maps"]
+            
+            # 步骤2：将3D关键点投影到各相机的2D图像平面
+            points_2d, depth, mask = self.project_points(
+                key_points,
+                metas["projection_mat"],
+                metas.get("image_wh"),
+            )
+
+            # 步骤3：计算注意力权重
+            weights = self._get_weights(
+                instance_feature, anchor_embed, metas, mask
+            )
+
+            # 步骤4：从特征图中采样关键点特征
+            # features: [B, num_anchor, num_cams, num_levels, num_pts, embed_dims]
+            features = self.feature_sampling(
+                original_feature_maps,
+                key_points,
+                metas["projection_mat"],
+                metas.get("image_wh"),
+            )
+
+            # 步骤5：多视角、多尺度特征融合
+            # features: [B, num_anchor, num_pts, embed_dims]
+            features = self.multi_view_level_fusion(features, weights)
+            # 对所有关键点特征求和
+            features = features.sum(dim=2)
+        
         # 步骤8：投影和残差连接
         # 通过线性层投影并应用dropout
         output = self.proj_drop(self.output_proj(features))
@@ -451,22 +483,34 @@ class DeformableFeatureAggregation(nn.Module):
         # 将坐标转换为 [-1, 1] 范围（grid_sample要求）
         points_2d = points_2d * 2 - 1
         
-        # 展平为 [B*num_anchor*num_pts, num_cams, 2]
-        points_2d = points_2d.flatten(end_dim=1)
-
+        # points_2d: [B, num_cams, num_anchor, num_pts, 2]
+        
         # 从各尺度特征图中采样
         features = []
         for fm in feature_maps:
-            # 展平特征图 [B, num_cams, embed_dims, H, W] → [B*num_cams, embed_dims, H, W]
-            # grid_sample采样：[B*num_cams, embed_dims, num_anchor*num_pts]
-            features.append(
-                torch.nn.functional.grid_sample(
-                    fm.flatten(end_dim=1), points_2d
+            # fm: [B, num_cams, embed_dims, H, W]
+            fm_sampled = []
+            for cam_idx in range(num_cams):
+                # 对每个相机单独采样
+                # 特征图: [B, embed_dims, H, W]
+                fm_cam = fm[:, cam_idx, :, :, :]
+                # 关键点: [B, num_anchor, num_pts, 2]
+                pts_cam = points_2d[:, cam_idx, :, :, :]
+                # 展平为 [B, num_anchor*num_pts, 2]
+                pts_cam_flat = pts_cam.flatten(1, 2)
+                # grid_sample要求grid形状为 [B, H_out, W_out, 2]
+                pts_cam_grid = pts_cam_flat.unsqueeze(1)  # [B, 1, num_anchor*num_pts, 2]
+                # 采样: [B, embed_dims, 1, num_anchor*num_pts]
+                sampled = torch.nn.functional.grid_sample(
+                    fm_cam, pts_cam_grid, align_corners=False
                 )
-            )
+                # 移除中间维度: [B, embed_dims, num_anchor*num_pts]
+                fm_sampled.append(sampled.squeeze(2))
+            # 按相机维度拼接: [B, num_cams, embed_dims, num_anchor*num_pts]
+            features.append(torch.stack(fm_sampled, dim=1))
         
-        # 将多尺度特征堆叠 [num_levels, B*num_cams, embed_dims, num_anchor*num_pts]
-        features = torch.stack(features, dim=1)
+        # 将多尺度特征堆叠 [B, num_cams, num_levels, embed_dims, num_anchor*num_pts]
+        features = torch.stack(features, dim=2)
         
         # 调整形状为 [B, num_anchor, num_cams, num_levels, num_pts, embed_dims]
         features = features.reshape(

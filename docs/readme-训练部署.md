@@ -2,7 +2,7 @@
 
 > 本文档汇总了关于 TorchScript、PyTorch TensorRT 和 LibTorch 在训练、加速、部署中的使用方法和配合方案。
 
----
+***
 
 ## 目录
 
@@ -12,7 +12,7 @@
 4. [常见问题澄清](#四常见问题澄清)
 5. [版本匹配与依赖](#五版本匹配与依赖)
 
----
+***
 
 ## 一、核心组件概述
 
@@ -20,11 +20,68 @@
 
 **核心作用**：将 Python 编写的动态 PyTorch 模型转换为可序列化、可优化的静态图表示。
 
-| 特性 | 说明 |
-|------|------|
-| **Tracing** | 通过示例输入追踪模型执行路径 |
-| **Scripting** | 直接编译 Python 代码，支持控制流 |
-| **中间表示** | 生成与 Python 无关的 `.pt` 文件 |
+| 特性            | 说明                      |
+| ------------- | ----------------------- |
+| **Tracing**   | 通过示例输入追踪模型执行路径          |
+| **Scripting** | 直接编译 Python 代码，支持控制流    |
+| **中间表示**      | 生成与 Python 无关的 `.pt` 文件 |
+
+**模型导出与测试**
+
+### 1. 导出模型
+
+使用 `scripts/deployment/export_torchscript.py` 将训练好的模型导出为 TorchScript 格式：
+
+```bash
+# 默认导出（使用预训练权重）
+python scripts/deployment/export_torchscript.py
+
+# 指定权重路径和输出路径
+python scripts/deployment/export_torchscript.py \
+    --ckpt exp/sparsedrive_agent/2026.06.17.17.46.52/periodic_pdm_ckpts/ep0010.ckpt \
+    --output exp/deployment/model_scripted.pt
+```
+
+**参数说明**：
+
+| 参数         | 默认值                                     | 说明         |
+| ---------- | --------------------------------------- | ---------- |
+| `--ckpt`   | `exp/sparsedrive_agent/.../ep0010.ckpt` | 训练好的模型权重路径 |
+| `--output` | `exp/deployment/model_scripted.pt`      | 导出模型的保存路径  |
+
+**导出要点**：
+
+- 使用纯 PyTorch 实现（`use_deformable_func=False`），移除自定义 CUDA 扩展依赖
+- 输入格式：`imgs[B, 3, 3, H, W]`, `status[B, 8]`, `lidar2img[B, 3, 4, 4]` 等
+- 输出格式：`trajectory[B, 8, 3]`（8个轨迹点，每个包含 x, y, heading）
+
+### 2. 测试部署模型
+
+使用 `scripts/deployment/test_deployment.py` 验证导出的模型：
+
+```bash
+# 测试导出的模型
+python scripts/deployment/test_deployment.py --model exp/deployment/model_scripted.pt
+```
+
+**测试内容**：
+
+- CPU 推理时间测量
+- GPU 推理时间测量（如果可用）
+- CPU/GPU 输出一致性对比
+- 模型信息展示
+
+**示例输出**：
+
+```
+CPU 推理时间 (平均): 9.9987秒
+CPU FPS: 0.10
+输出形状: torch.Size([1, 8, 3])
+输出示例:
+tensor([[0.5707, 0.0167, 0.0318],
+        [0.9341, 0.0273, 0.0520],
+        ...])
+```
 
 **典型使用流程**：
 
@@ -49,22 +106,23 @@ output = loaded_model(input_tensor)
 ```
 
 **适用场景**：
+
 - 需要脱离 Python 运行时部署
 - 模型需要跨平台（C++、移动端）
 - 作为进一步优化的中间格式
 
----
+***
 
 ### 2. PyTorch TensorRT
 
 **核心作用**：利用 NVIDIA TensorRT 对 PyTorch 模型进行深度学习推理优化，显著提升 GPU 上的推理速度。
 
-| 特性 | 说明 |
-|------|------|
+| 特性       | 说明                                    |
+| -------- | ------------------------------------- |
 | **自动转换** | 将 TorchScript/FX Graph 转为 TensorRT 引擎 |
-| **混合精度** | 支持 FP16/INT8 量化加速 |
-| **层融合** | 自动合并算子减少内存访问 |
-| **动态形状** | 支持变长输入 |
+| **混合精度** | 支持 FP16/INT8 量化加速                     |
+| **层融合**  | 自动合并算子减少内存访问                          |
+| **动态形状** | 支持变长输入                                |
 
 **典型使用流程**：
 
@@ -91,21 +149,22 @@ with torch.no_grad():
 ```
 
 **加速效果**：
+
 - 通常可获得 **2-5 倍** 的推理速度提升
 - 显存占用降低（通过层融合和内存优化）
 
----
+***
 
 ### 3. LibTorch
 
 **核心作用**：提供 PyTorch 的 C++ 前端，用于在生产环境中加载和运行 TorchScript 模型。
 
-| 特性 | 说明 |
-|------|------|
-| **无 Python 依赖** | 纯 C++ 库，适合嵌入式/服务端 |
-| **加载 TorchScript** | 直接运行 `.pt` 文件 |
-| **GPU/CPU 支持** | 完整的张量运算能力 |
-| **线程安全** | 适合高并发服务 |
+| 特性                 | 说明                |
+| ------------------ | ----------------- |
+| **无 Python 依赖**    | 纯 C++ 库，适合嵌入式/服务端 |
+| **加载 TorchScript** | 直接运行 `.pt` 文件     |
+| **GPU/CPU 支持**     | 完整的张量运算能力         |
+| **线程安全**           | 适合高并发服务           |
 
 **典型使用流程**：
 
@@ -137,7 +196,7 @@ int main() {
 }
 ```
 
----
+***
 
 ## 二、TorchScript 导出与 TensorRT 加速
 
@@ -201,6 +260,7 @@ torch.jit.save(trt_model, "model_trt.ts")
 ```
 
 **C++ 加载方式**：
+
 ```cpp
 #include <torch/torch.h>
 #include <torch/script.h>
@@ -215,15 +275,15 @@ auto output = module.forward(inputs).toTensor();
 
 ### 关键要点
 
-| 要点 | 说明 |
-|------|------|
-| **输入格式** | TorchScript 是 TensorRT 编译的理想输入格式 |
-| **动态形状** | 支持通过 `min/opt/max_shape` 配置动态 batch/尺寸 |
-| **精度选择** | FP16 通常提供 2-3 倍加速，INT8 需要校准 |
-| **保存格式** | 优化后的模型仍是 TorchScript 格式 (`.ts`) |
-| **运行时依赖** | 部署环境需要安装 `libtorch` + `libnvinfer` |
+| 要点        | 说明                                     |
+| --------- | -------------------------------------- |
+| **输入格式**  | TorchScript 是 TensorRT 编译的理想输入格式       |
+| **动态形状**  | 支持通过 `min/opt/max_shape` 配置动态 batch/尺寸 |
+| **精度选择**  | FP16 通常提供 2-3 倍加速，INT8 需要校准            |
+| **保存格式**  | 优化后的模型仍是 TorchScript 格式 (`.ts`)        |
+| **运行时依赖** | 部署环境需要安装 `libtorch` + `libnvinfer`     |
 
----
+***
 
 ## 三、完整部署流程
 
@@ -247,14 +307,14 @@ C++ 部署 (LibTorch + TensorRT)
 
 **关键结论**：LibTorch 可以加载 `.ts` 格式的 TensorRT 优化模型，但需要满足以下条件：
 
-| 条件 | 说明 |
-|------|------|
-| 编译和部署使用 **相同版本** 的 LibTorch | 版本不匹配会导致加载失败 |
-| 部署环境安装 **TensorRT 库** | `libnvinfer.so` 等必须存在 |
-| 部署环境有 **CUDA 驱动和运行时** | GPU 环境必需 |
-| 使用 **相同的 GPU 架构** | 不同架构的 engine 不兼容 |
+| 条件                          | 说明                    |
+| --------------------------- | --------------------- |
+| 编译和部署使用 **相同版本** 的 LibTorch | 版本不匹配会导致加载失败          |
+| 部署环境安装 **TensorRT 库**       | `libnvinfer.so` 等必须存在 |
+| 部署环境有 **CUDA 驱动和运行时**       | GPU 环境必需              |
+| 使用 **相同的 GPU 架构**           | 不同架构的 engine 不兼容      |
 
----
+***
 
 ### 第一步：Python 端导出 TensorRT 优化模型
 
@@ -333,7 +393,7 @@ with torch.no_grad():
     print("验证成功！")
 ```
 
----
+***
 
 ### 第二步：C++ LibTorch 加载和推理
 
@@ -484,7 +544,7 @@ target_compile_options(infer PRIVATE
 set_property(TARGET infer PROPERTY CXX_STANDARD 17)
 ```
 
----
+***
 
 ### 第三步：编译和运行
 
@@ -498,7 +558,43 @@ make -j$(nproc)
 ./infer /path/to/model_trt.ts
 ```
 
----
+***
+
+<br />
+
+**补充：**
+
+## 在 Orin 上的部署步骤
+
+### 步骤 1: 传输文件到 Orin
+
+```
+# 传输 C++ 代码
+scp -r scripts/deployment/cpp/ root@orin_ip:/etc/lg/
+truck/test_torch/cpp/
+
+# 传输模型文件（如果还没传输）
+scp exp/deployment/model_scripted_cpu.pt 
+root@orin_ip:/etc/lg/truck/test_torch/
+```
+
+### 步骤 2: 在 Orin 上编译
+
+```
+cd /etc/lg/truck/test_torch/cpp/
+chmod +x build.sh run.sh
+./build.sh
+```
+
+### 步骤 3: 在 Orin 上运行测试
+
+```
+./run.sh ../model_scripted_cpu.pt
+```
+
+<br />
+
+<br />
 
 ## 四、常见问题澄清
 
@@ -506,11 +602,11 @@ make -j$(nproc)
 
 **澄清**：
 
-| 方案 | 是否可行 | 说明 |
-|------|----------|------|
-| **TensorRT 原生 API** 直接加载 `.pt` 文件 | ❌ 不可行 | TensorRT 原生不支持 TorchScript 格式 |
-| **torch-tensorrt** 编译 TorchScript 模型 | ✅ **完全可行** | PyTorch 官方提供的集成方案 |
-| **ONNX 中间转换** | ✅ 可行 | TorchScript → ONNX → TensorRT |
+| 方案                                   | 是否可行       | 说明                            |
+| ------------------------------------ | ---------- | ----------------------------- |
+| **TensorRT 原生 API** 直接加载 `.pt` 文件    | ❌ 不可行      | TensorRT 原生不支持 TorchScript 格式 |
+| **torch-tensorrt** 编译 TorchScript 模型 | ✅ **完全可行** | PyTorch 官方提供的集成方案             |
+| **ONNX 中间转换**                        | ✅ 可行       | TorchScript → ONNX → TensorRT |
 
 **正确理解 torch-tensorrt**：
 
@@ -529,6 +625,7 @@ TensorRT Builder 优化生成 Engine
 ```
 
 **关键点**：`torch-tensorrt.compile()` 的输入可以是：
+
 - `torch.nn.Module`（PyTorch 模型）
 - `torch.jit.ScriptModule`（TorchScript 模型）✅
 
@@ -560,18 +657,18 @@ trt_model = torch_tensorrt.compile(
 torch.jit.save(trt_model, "model_trt.ts")
 ```
 
----
+***
 
 ## 五、版本匹配与依赖
 
 ### 版本匹配要求（非常重要！）
 
-| 组件 | 编译环境版本 | 部署环境版本 |
-|------|-------------|-------------|
-| PyTorch | 2.0.1 | 2.0.1 (LibTorch) |
-| TensorRT | 8.6.1 | 8.6.1 |
-| CUDA | 11.8 | 11.8 |
-| cuDNN | 8.9 | 8.9 |
+| 组件       | 编译环境版本 | 部署环境版本           |
+| -------- | ------ | ---------------- |
+| PyTorch  | 2.0.1  | 2.0.1 (LibTorch) |
+| TensorRT | 8.6.1  | 8.6.1            |
+| CUDA     | 11.8   | 11.8             |
+| cuDNN    | 8.9    | 8.9              |
 
 **版本不匹配会导致加载失败！**
 
@@ -592,27 +689,27 @@ export LD_LIBRARY_PATH=/path/to/libtorch/lib:$LD_LIBRARY_PATH
 
 ### 常见问题
 
-| 问题 | 原因 | 解决方案 |
-|------|------|----------|
-| `Error loading the model` | 版本不匹配 | 确保编译和部署使用相同版本 |
-| `CUDA error: no kernel image` | GPU 架构不匹配 | 在目标 GPU 上重新编译 |
-| `undefined symbol` | ABI 不匹配 | 使用 `-D_GLIBCXX_USE_CXX11_ABI=1` |
-| `TensorRT not found` | 缺少 TensorRT 库 | 安装 TensorRT 并设置路径 |
+| 问题                            | 原因            | 解决方案                            |
+| ----------------------------- | ------------- | ------------------------------- |
+| `Error loading the model`     | 版本不匹配         | 确保编译和部署使用相同版本                   |
+| `CUDA error: no kernel image` | GPU 架构不匹配     | 在目标 GPU 上重新编译                   |
+| `undefined symbol`            | ABI 不匹配       | 使用 `-D_GLIBCXX_USE_CXX11_ABI=1` |
+| `TensorRT not found`          | 缺少 TensorRT 库 | 安装 TensorRT 并设置路径               |
 
----
+***
 
 ## 六、场景选择建议
 
-| 场景 | 推荐方案 | 理由 |
-|------|----------|------|
-| **快速原型/研究** | Python + PyTorch | 开发效率高，调试方便 |
-| **内部 API 服务** | TorchScript + Python | 部署简单，性能可接受 |
-| **高性能生产服务** | TensorRT + C++/TRITON | 最大化 GPU 利用率 |
-| **移动端/嵌入式** | TorchScript + PyTorch Mobile | 轻量级，跨平台 |
-| **边缘设备 (Jetson)** | TensorRT | 针对嵌入式 GPU 优化 |
-| **跨平台 C++ 应用** | LibTorch | 无 Python 依赖，可移植 |
+| 场景                | 推荐方案                         | 理由              |
+| ----------------- | ---------------------------- | --------------- |
+| **快速原型/研究**       | Python + PyTorch             | 开发效率高，调试方便      |
+| **内部 API 服务**     | TorchScript + Python         | 部署简单，性能可接受      |
+| **高性能生产服务**       | TensorRT + C++/TRITON        | 最大化 GPU 利用率     |
+| **移动端/嵌入式**       | TorchScript + PyTorch Mobile | 轻量级，跨平台         |
+| **边缘设备 (Jetson)** | TensorRT                     | 针对嵌入式 GPU 优化    |
+| **跨平台 C++ 应用**    | LibTorch                     | 无 Python 依赖，可移植 |
 
----
+***
 
 ## 七、完整流程总结
 
@@ -636,11 +733,12 @@ export LD_LIBRARY_PATH=/path/to/libtorch/lib:$LD_LIBRARY_PATH
 ```
 
 **核心要点**：
+
 - TorchScript 是连接 Python 训练与生产部署的桥梁
 - TensorRT 是针对 NVIDIA GPU 的深度优化层
 - LibTorch 是脱离 Python 的生产环境执行引擎
 - **版本必须严格匹配**是成功部署的关键
 
----
+***
 
 *文档生成时间：2026-05-31*

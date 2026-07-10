@@ -26,19 +26,9 @@ bool SparseDriveInfer::load_model(const std::string& model_path, bool use_gpu) {
         model_loaded_ = true;
         
         std::cout << "Model loaded successfully: " << model_path << std::endl;
-        
-        std::string filename = model_path.substr(model_path.find_last_of("/\\") + 1);
-        if (filename.find(".ts") != std::string::npos) {
-            std::cout << "Note: This appears to be a TensorRT optimized model (.ts)" << std::endl;
-        }
-        
         return true;
     } catch (const c10::Error& e) {
         std::cerr << "Failed to load model: " << e.what() << std::endl;
-        std::cerr << "Possible reasons:" << std::endl;
-        std::cerr << "  - Model was compiled with different PyTorch/TensorRT version" << std::endl;
-        std::cerr << "  - TensorRT library not found" << std::endl;
-        std::cerr << "  - CUDA driver version mismatch" << std::endl;
         return false;
     }
 }

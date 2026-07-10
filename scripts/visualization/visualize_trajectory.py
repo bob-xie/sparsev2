@@ -9,6 +9,14 @@ import os
 import sys
 from pathlib import Path
 
+project_root = Path(__file__).parent.parent.parent
+os.chdir(str(project_root))
+
+os.environ['OPENSCENE_DATA_ROOT'] = str(project_root)
+os.environ['NAVSIM_DEVKIT_ROOT'] = str(project_root)
+os.environ['NAVSIM_EXP_ROOT'] = str(project_root / 'exp')
+os.environ['NUPLAN_MAPS_ROOT'] = str(project_root / 'maps/nuplan-maps-v1.0')
+
 import matplotlib
 matplotlib.use('Agg')
 
@@ -26,13 +34,22 @@ from navsim.visualization.plots import plot_bev_with_agent, frame_plot_to_gif
 def load_agent(ckpt_path: str, cfg: dict) -> SparseDriveAgent:
     agent: SparseDriveAgent = instantiate(cfg)
     checkpoint = torch.load(ckpt_path, map_location='cpu')
+    
     if 'state_dict' in checkpoint:
-        agent.load_state_dict(checkpoint['state_dict'])
+        state_dict = checkpoint['state_dict']
     elif 'agent' in checkpoint:
-        agent.load_state_dict(checkpoint['agent'])
+        state_dict = checkpoint['agent']
     else:
-        agent.load_state_dict(checkpoint)
+        state_dict = checkpoint
+    
+    state_dict = {k.replace("agent.", ""): v for k, v in state_dict.items()}
+    agent.load_state_dict(state_dict)
     agent.eval()
+    
+    if torch.cuda.is_available():
+        agent = agent.cuda()
+        print("模型已移至 CUDA")
+    
     return agent
 
 
@@ -47,21 +64,13 @@ def main():
     ckpt_path = args.ckpt
     output_dir = args.output
     
-    project_root = Path(__file__).parent.parent.parent
-    
-    os.environ['OPENSCENE_DATA_ROOT'] = str(project_root)
-    os.environ['NAVSIM_DEVKIT_ROOT'] = str(project_root)
-    os.environ['NAVSIM_EXP_ROOT'] = str(project_root / 'exp')
-    os.environ['NUPLAN_MAPS_ROOT'] = str(project_root / 'maps/nuplan-maps-v1.0')
-    
     output_path = Path(project_root / output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
     
     print(f"项目根目录: {project_root}")
-    print(f"当前工作目录(修改前): {os.getcwd()}")
-    os.chdir(str(project_root))
-    print(f"当前工作目录(修改后): {os.getcwd()}")
-    hydra.initialize(config_path="./navsim/planning/script/config/common/train_test_split/scene_filter", version_base=None)
+    print(f"当前工作目录: {os.getcwd()}")
+    
+    hydra.initialize(config_path="../../navsim/planning/script/config/common/train_test_split/scene_filter", version_base=None)
     cfg_filter = hydra.compose(config_name="all_scenes")
     scene_filter: SceneFilter = instantiate(cfg_filter)
     
@@ -79,7 +88,9 @@ def main():
     print(f"场景加载成功, 帧数: {len(scene.frames)}")
     
     print(f"加载模型: {ckpt_path}")
-    hydra.initialize(config_path="./navsim/planning/script/config/training", version_base=None)
+    from hydra.core.global_hydra import GlobalHydra
+    GlobalHydra.instance().clear()
+    hydra.initialize(config_path="../../navsim/planning/script/config/training", version_base=None)
     cfg_train = hydra.compose(config_name='default_training', overrides=[
         'train_test_split=navmini',
         'agent=sparsedrive_agent',

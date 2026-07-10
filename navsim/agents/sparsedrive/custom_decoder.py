@@ -142,7 +142,7 @@ class CustomTransformerDecoderLayer(nn.Module):
             num_cams=len(config.cams),               # 相机数量: 3（左、前、右）
             num_pts=self._config.len_path,           # 每条路径的点数: 50
             attn_drop=0.0,             # 注意力dropout: 0.0（不使用）
-            use_deformable_func=True,  # 是否使用可变形注意力函数: True（核心创新点）
+            use_deformable_func=config.use_deformable_func,  # 是否使用可变形注意力函数
             use_camera_embed=True,     # 是否使用相机嵌入: True（区分不同相机视角）
             residual_mode="add",       # 残差连接方式: "add"（加性残差）
         )
@@ -234,7 +234,7 @@ class CustomTransformerDecoderLayer(nn.Module):
                 num_cams=len(config.cams),           # 相机数量: 3
                 num_pts=num_poses,                   # 轨迹姿态数量: 8
                 attn_drop=0.0,
-                use_deformable_func=True,
+                use_deformable_func=config.use_deformable_func,
                 use_camera_embed=True,
                 residual_mode="add",
             )

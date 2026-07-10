@@ -35,10 +35,10 @@
 
 | 参数 | 形状 | 参数量 | 文件位置 | 说明 |
 |------|------|--------|----------|------|
-| `_trajectory_head.traj_vocab` | [1024, 256, 8, 3] | **6.29M** | `sparsedrive_model.py:169-172` | 完整轨迹词汇表（路径1024 × 速度256 × 8个姿态点 × 3维坐标） |
-| `_trajectory_head.traj_mask` | [1024, 256, 8] | **2.097M** | `sparsedrive_model.py:178-181` | 轨迹有效性掩码 |
 | `_trajectory_head.path_vocab` | [1024, 50, 3] | **153.6K** | `sparsedrive_model.py:153-156` | 路径词汇表（1024条路径，每条50个点） |
 | `_trajectory_head.vel_vocab` | [256, 8] | **2K** | `sparsedrive_model.py:160-163` | 速度词汇表（256个速度序列） |
+| `_trajectory_head.traj_vocab` | [1024, 256, 8, 3] | **6.29M** | `sparsedrive_model.py:169-172` | 完整轨迹词汇表（路径1024 × 速度256 × 8个姿态点 × 3维坐标） |
+| `_trajectory_head.traj_mask` | [1024, 256, 8] | **2.097M** | `sparsedrive_model.py:178-181` | 轨迹有效性掩码 |
 
 **设计原理**：通过可分解词汇表（路径1024 + 速度256 = 262K组合）实现高效轨迹搜索。
 
@@ -46,104 +46,331 @@
 
 #### 1.4.1 ResNet-34 骨干
 
-| 参数 | 形状 | 参数量 | 文件位置 | 说明 |
-|------|------|--------|----------|------|
-| `conv1.weight` | [64, 3, 7, 7] | 94K | `sparsedrive_backbone.py:68-74` | 输入卷积层 |
-| `layer1.conv1/conv2.weight` | [64, 64, 3, 3] | 36.9K × 6 | `sparsedrive_backbone.py:68-74` | 第1层3个BasicBlock |
-| `layer2.conv1/conv2.weight` | [128, 128, 3, 3] | 147.5K × 6 | `sparsedrive_backbone.py:68-74` | 第2层4个BasicBlock |
-| `layer2.downsample.0.weight` | [128, 64, 1, 1] | 73.7K | `sparsedrive_backbone.py:68-74` | 第2层下采样 |
-| `layer3.conv1/conv2.weight` | [256, 256, 3, 3] | 589.8K × 10 | `sparsedrive_backbone.py:68-74` | 第3层6个BasicBlock |
-| `layer3.downsample.0.weight` | [256, 128, 1, 1] | 294.9K | `sparsedrive_backbone.py:68-74` | 第3层下采样 |
-| `layer4.conv1/conv2.weight` | [512, 512, 3, 3] | 2.36M × 5 | `sparsedrive_backbone.py:68-74` | 第4层3个BasicBlock |
-| `layer4.downsample.0.weight` | [512, 256, 1, 1] | 131K | `sparsedrive_backbone.py:68-74` | 第4层下采样 |
-| **ResNet-34 总计** | - | **~21.7M** | - | 使用预训练权重初始化 |
+**模块创建位置**: `navsim/agents/sparsedrive/sparsedrive_backbone.py:68-74`
+
+```python
+self.img_backbone = timm.create_model(
+    config.image_architecture,  # "resnet34"
+    pretrained=True,
+    features_only=True,
+    pretrained_cfg_overlay=dict(file=config.bkb_path),
+    out_indices=(1, 2, 3, 4)[-config.num_levels:]
+)
+```
+
+**参数实际定义位置**: `miniconda3/envs/navsim/lib/python3.9/site-packages/timm/models/resnet.py`
+
+| 参数 | 形状 | 参数量 | 说明 |
+|------|------|--------|------|
+| `conv1.weight` | [64, 3, 7, 7] | 94K | 输入卷积层 |
+| `bn1.weight/bias` | [64] | 128 | 输入批归一化 |
+| `layer1.0.conv1/conv2.weight` | [64, 64, 3, 3] | 36.9K × 2 | 第1层第1个BasicBlock |
+| `layer1.1.conv1/conv2.weight` | [64, 64, 3, 3] | 36.9K × 2 | 第1层第2个BasicBlock |
+| `layer1.2.conv1/conv2.weight` | [64, 64, 3, 3] | 36.9K × 2 | 第1层第3个BasicBlock |
+| `layer2.0.conv1.weight` | [128, 64, 3, 3] | 73.7K | 第2层第1个BasicBlock（下采样） |
+| `layer2.0.conv2.weight` | [128, 128, 3, 3] | 147.5K | 第2层第1个BasicBlock |
+| `layer2.0.downsample.0.weight` | [128, 64, 1, 1] | 73.7K | 第2层下采样卷积 |
+| `layer2.1-3.conv1/conv2.weight` | [128, 128, 3, 3] | 147.5K × 6 | 第2层第2-4个BasicBlock |
+| `layer3.0.conv1.weight` | [256, 128, 3, 3] | 294.9K | 第3层第1个BasicBlock（下采样） |
+| `layer3.0.conv2.weight` | [256, 256, 3, 3] | 589.8K | 第3层第1个BasicBlock |
+| `layer3.0.downsample.0.weight` | [256, 128, 1, 1] | 294.9K | 第3层下采样卷积 |
+| `layer3.1-5.conv1/conv2.weight` | [256, 256, 3, 3] | 589.8K × 10 | 第3层第2-6个BasicBlock |
+| `layer4.0.conv1.weight` | [512, 256, 3, 3] | 1.18M | 第4层第1个BasicBlock（下采样） |
+| `layer4.0.conv2.weight` | [512, 512, 3, 3] | 2.36M | 第4层第1个BasicBlock |
+| `layer4.0.downsample.0.weight` | [512, 256, 1, 1] | 131K | 第4层下采样卷积 |
+| `layer4.1-2.conv1/conv2.weight` | [512, 512, 3, 3] | 2.36M × 4 | 第4层第2-3个BasicBlock |
+| **ResNet-34 总计** | - | **~21.7M** | 使用预训练权重初始化 |
 
 #### 1.4.2 FPN Neck
 
-| 参数 | 形状 | 参数量 | 文件位置 | 说明 |
-|------|------|--------|----------|------|
-| `img_neck.inner_blocks[0-3].0.weight` | [256, 64/128/256/512, 1, 1] | 65.5K × 2 + 131K + 131K | `sparsedrive_backbone.py:78-81` | 1×1卷积降维 |
-| `img_neck.layer_blocks[0-3].0.weight` | [256, 256, 3, 3] | 589.8K × 4 | `sparsedrive_backbone.py:78-81` | 3×3卷积融合 |
-| **FPN 总计** | - | **~2.2M** | - | 多尺度特征融合 |
+**模块创建位置**: `navsim/agents/sparsedrive/sparsedrive_backbone.py:77-81`
+
+```python
+if self.with_img_neck:
+    self.img_neck = FPN(
+        in_channels_list=[64, 128, 256, 512][-config.num_levels:],
+        out_channels=self.embed_dims,  # 256
+    )
+```
+
+**参数实际定义位置**: `miniconda3/envs/navsim/lib/python3.9/site-packages/torchvision/ops/fpn.py`
+
+| 参数 | 形状 | 参数量 | 说明 |
+|------|------|--------|------|
+| `inner_blocks[0].weight` | [256, 64, 1, 1] | 16.4K | P2层1×1卷积 |
+| `inner_blocks[1].weight` | [256, 128, 1, 1] | 32.8K | P3层1×1卷积 |
+| `inner_blocks[2].weight` | [256, 256, 1, 1] | 65.5K | P4层1×1卷积 |
+| `inner_blocks[3].weight` | [256, 512, 1, 1] | 131K | P5层1×1卷积 |
+| `layer_blocks[0].weight` | [256, 256, 3, 3] | 589.8K | P2层3×3卷积 |
+| `layer_blocks[1].weight` | [256, 256, 3, 3] | 589.8K | P3层3×3卷积 |
+| `layer_blocks[2].weight` | [256, 256, 3, 3] | 589.8K | P4层3×3卷积 |
+| `layer_blocks[3].weight` | [256, 256, 3, 3] | 589.8K | P5层3×3卷积 |
+| **FPN 总计** | - | **~2.2M** | 多尺度特征融合 |
 
 ### 1.5 状态编码器 - 2.3K
 
-| 参数 | 形状 | 参数量 | 文件位置 | 说明 |
-|------|------|--------|----------|------|
-| `_status_encoding.weight` | [256, 8] | 2.048K | `sparsedrive_model.py:62` | Linear(8→256) |
-| `_status_encoding.bias` | [256] | 256 | `sparsedrive_model.py:62` | 偏置 |
+**代码位置**: `navsim/agents/sparsedrive/sparsedrive_model.py:62`
+
+```python
+self._status_encoding = nn.Linear(4 + 2 + 2, config.d_model)  # Linear(8→256)
+```
+
+| 参数 | 形状 | 参数量 | 实际定义位置 | 说明 |
+|------|------|--------|-------------|------|
+| `_status_encoding.weight` | [256, 8] | 2.048K | `torch/nn/modules/linear.py` | Linear层权重 |
+| `_status_encoding.bias` | [256] | 256 | `torch/nn/modules/linear.py` | Linear层偏置 |
 
 ### 1.6 位置编码器 - ~1.05M
 
 #### 1.6.1 路径位置编码器
 
-| 参数 | 形状 | 参数量 | 文件位置 | 说明 |
-|------|------|--------|----------|------|
-| `path_pos_embed.0.weight` | [1024, 150] | 153.6K | `sparsedrive_model.py:187-191` | Linear(150→1024) |
-| `path_pos_embed.2.weight` | [256, 1024] | 262.1K | `sparsedrive_model.py:187-191` | Linear(1024→256) |
-| **路径编码器总计** | - | **~417.8K** | - | |
+**代码位置**: `navsim/agents/sparsedrive/sparsedrive_model.py:187-191`
+
+```python
+self.path_pos_embed = nn.Sequential(
+    nn.Linear(config.len_path * 3, d_ffn),  # 50*3=150 -> 1024
+    nn.ReLU(),
+    nn.Linear(d_ffn, d_model),              # 1024 -> 256
+)
+```
+
+| 参数 | 形状 | 参数量 | 实际定义位置 | 说明 |
+|------|------|--------|-------------|------|
+| `path_pos_embed.0.weight` | [1024, 150] | 153.6K | `torch/nn/modules/linear.py` | 第一层Linear权重 |
+| `path_pos_embed.0.bias` | [1024] | 1.0K | `torch/nn/modules/linear.py` | 第一层Linear偏置 |
+| `path_pos_embed.2.weight` | [256, 1024] | 262.1K | `torch/nn/modules/linear.py` | 第二层Linear权重 |
+| `path_pos_embed.2.bias` | [256] | 256 | `torch/nn/modules/linear.py` | 第二层Linear偏置 |
+| **路径编码器总计** | - | **~417K** (417,024) | - | |
 
 #### 1.6.2 速度位置编码器
 
-| 参数 | 形状 | 参数量 | 文件位置 | 说明 |
-|------|------|--------|----------|------|
-| `vel_pos_embed.0.weight` | [1024, 8] | 8.2K | `sparsedrive_model.py:195-199` | Linear(8→1024) |
-| `vel_pos_embed.2.weight` | [256, 1024] | 262.1K | `sparsedrive_model.py:195-199` | Linear(1024→256) |
-| **速度编码器总计** | - | **~270.3K** | - | |
+**代码位置**: `navsim/agents/sparsedrive/sparsedrive_model.py:195-199`
+
+```python
+self.vel_pos_embed = nn.Sequential(
+    nn.Linear(config.len_vel_seq, d_ffn),   # 8 -> 1024
+    nn.ReLU(),
+    nn.Linear(d_ffn, d_model),              # 1024 -> 256
+)
+```
+
+| 参数 | 形状 | 参数量 | 实际定义位置 | 说明 |
+|------|------|--------|-------------|------|
+| `vel_pos_embed.0.weight` | [1024, 8] | 8.2K | `torch/nn/modules/linear.py` | 第一层Linear权重 |
+| `vel_pos_embed.0.bias` | [1024] | 1.0K | `torch/nn/modules/linear.py` | 第一层Linear偏置 |
+| `vel_pos_embed.2.weight` | [256, 1024] | 262.1K | `torch/nn/modules/linear.py` | 第二层Linear权重 |
+| `vel_pos_embed.2.bias` | [256] | 256 | `torch/nn/modules/linear.py` | 第二层Linear偏置 |
+| **速度编码器总计** | - | **~272K** (271,616) | - | |
 
 ### 1.7 Transformer Decoder - ~16.5M
 
+Transformer Decoder 定义在 `navsim/agents/sparsedrive/custom_decoder.py` 中，包含2层解码器，每层有路径、速度分支，最后一层额外有轨迹分支。
+
 #### 1.7.1 可变形特征聚合（DeformableFeatureAggregation）
 
-每个解码器层包含2个（路径+速度），最后一层额外1个（轨迹）：
+**代码位置**: `navsim/agents/sparsedrive/custom_decoder.py:137-148`（路径分支）和 `custom_decoder.py:229-240`（轨迹分支）
 
-| 参数 | 形状 | 参数量 | 文件位置 | 说明 |
-|------|------|--------|----------|------|
-| `weights_fc.weight` | [16000, 256] | 4.096M × 4 | `custom_decoder.py:137-148` | 可变形注意力权重（路径分支） |
-| `weights_fc.weight` | [2560, 256] | 655.4K | `custom_decoder.py:229-240` | 可变形注意力权重（轨迹分支） |
-| `kps_generator.learnable_fc.weight` | [1000, 256] | 256K × 4 | `custom_decoder.py:137-148` | 关键点生成器 |
-| `kps_generator.learnable_fc.weight` | [160, 256] | 40.96K | `custom_decoder.py:229-240` | 关键点生成器（轨迹分支） |
-| `camera_encoder` | - | ~131K × 5 | `custom_decoder.py:137-148` | 相机嵌入编码器 |
-| `output_proj.weight` | [256, 256] | 65.5K × 5 | `custom_decoder.py:137-148` | 输出投影 |
+```python
+self.p_deform_model = DeformableFeatureAggregation(
+    config=config, embed_dims=d_model, num_groups=8,
+    num_levels=self._config.num_levels,  # 4层特征
+    num_cams=len(config.cams),           # 3个相机
+    num_pts=self._config.len_path,       # 50个路径点
+    attn_drop=0.0, use_deformable_func=True,
+    use_camera_embed=True, residual_mode="add",
+)
+
+self.t_deform_model = DeformableFeatureAggregation(
+    config=config, embed_dims=d_model, num_groups=8,
+    num_levels=self._config.num_levels,
+    num_cams=len(config.cams),
+    num_pts=num_poses,                   # 8个轨迹点
+    attn_drop=0.0, use_deformable_func=True,
+    use_camera_embed=True, residual_mode="add",
+)
+```
+
+**关键点数量计算**（`blocks.py:551`）：
+
+```python
+# sparsedrive_config.py:53-54
+fix_height = (0., -0.25, -0.5, 0.25, 0.5)  # len=5
+num_learnable_pts = 2
+
+# blocks.py:551
+self.num_pts = num_sample * len(fix_height) * num_learnable_pts
+
+# 路径分支: num_sample=50（路径点数）
+num_pts = 50 × 5 × 2 = 500
+learnable_fc输出维度 = 500 × 2 = 1000  # 每个关键点有x,y两个偏移量
+
+# 轨迹分支: num_sample=8（轨迹姿态数）
+num_pts = 8 × 5 × 2 = 80
+learnable_fc输出维度 = 80 × 2 = 160
+```
+
+| 参数 | 形状 | 参数量 | 实际定义位置 | 说明 |
+|------|------|--------|-------------|------|
+| `p_deform_model.weights_fc.weight` | [16000, 256] | 4.096M | `blocks.py:163-165` | 路径分支可变形注意力权重（8组×4层×500关键点） |
+| `p_deform_model.weights_fc.bias` | [16000] | 16K | `blocks.py:163-165` | 路径分支可变形注意力偏置 |
+| `p_deform_model.kps_generator.learnable_fc.weight` | [1000, 256] | 256K | `blocks.py:553` | 路径分支关键点生成器（50×5×2×2=1000） |
+| `p_deform_model.kps_generator.learnable_fc.bias` | [1000] | 1K | `blocks.py:553` | 路径分支关键点生成器偏置 |
+| `p_deform_model.camera_encoder.0.weight` | [256, 12] | 3.1K | `blocks.py:159-161` | 相机编码器第一层 |
+| `p_deform_model.camera_encoder.2.weight` | [256, 256] | 65.5K | `blocks.py:159-161` | 相机编码器第二层 |
+| `p_deform_model.output_proj.weight` | [256, 256] | 65.5K | `blocks.py:154` | 路径分支输出投影 |
+| `p_deform_model.output_proj.bias` | [256] | 256 | `blocks.py:154` | 路径分支输出投影偏置 |
+| `t_deform_model.weights_fc.weight` | [2560, 256] | 655.4K | `blocks.py:163-165` | 轨迹分支可变形注意力权重（8组×4层×80关键点） |
+| `t_deform_model.weights_fc.bias` | [2560] | 2.6K | `blocks.py:163-165` | 轨迹分支可变形注意力偏置 |
+| `t_deform_model.kps_generator.learnable_fc.weight` | [160, 256] | 40.96K | `blocks.py:553` | 轨迹分支关键点生成器（8×5×2×2=160） |
+| `t_deform_model.kps_generator.learnable_fc.bias` | [160] | 160 | `blocks.py:553` | 轨迹分支关键点生成器偏置 |
 | **可变形注意力总计** | - | **~18.3M** | - | 核心创新点 |
 
 #### 1.7.2 多头注意力（MultiheadAttention）
 
-每个解码器层包含4个（路径+速度+图像+轨迹）：
+**代码位置**: `navsim/agents/sparsedrive/custom_decoder.py:152-157`（路径）、`custom_decoder.py:185-190`（图像）、`custom_decoder.py:194-199`（速度）、`custom_decoder.py:244-249`（轨迹）
 
-| 参数 | 形状 | 参数量 | 文件位置 | 说明 |
-|------|------|--------|----------|------|
-| `in_proj_weight` | [768, 256] | 196.6K × 7 | `custom_decoder.py:152-157` | 输入投影（8头×3矩阵） |
-| `out_proj.weight` | [256, 256] | 65.5K × 7 | `custom_decoder.py:152-157` | 输出投影 |
+```python
+self.p_attention = nn.MultiheadAttention(config.d_model, config.num_head, dropout=config.dropout, batch_first=True)
+self.v_img_attention = nn.MultiheadAttention(config.d_model, config.num_head, dropout=config.dropout, batch_first=True)
+self.v_attention = nn.MultiheadAttention(config.d_model, config.num_head, dropout=config.dropout, batch_first=True)
+self.t_attention = nn.MultiheadAttention(config.d_model, config.num_head, dropout=config.dropout, batch_first=True)
+```
+
+| 参数 | 形状 | 参数量 | 实际定义位置 | 说明 |
+|------|------|--------|-------------|------|
+| `p_attention.in_proj_weight` | [768, 256] | 196.6K | `torch/nn/modules/attention.py` | 输入投影（Q+K+V，8头） |
+| `p_attention.in_proj_bias` | [768] | 768 | `torch/nn/modules/attention.py` | 输入投影偏置 |
+| `p_attention.out_proj.weight` | [256, 256] | 65.5K | `torch/nn/modules/attention.py` | 输出投影 |
+| `p_attention.out_proj.bias` | [256] | 256 | `torch/nn/modules/attention.py` | 输出投影偏置 |
+| `v_img_attention.in_proj_weight` | [768, 256] | 196.6K | `torch/nn/modules/attention.py` | 速度-图像交叉注意力 |
+| `v_img_attention.in_proj_bias` | [768] | 768 | `torch/nn/modules/attention.py` | 偏置 |
+| `v_img_attention.out_proj.weight` | [256, 256] | 65.5K | `torch/nn/modules/attention.py` | 输出投影 |
+| `v_img_attention.out_proj.bias` | [256] | 256 | `torch/nn/modules/attention.py` | 偏置 |
+| `v_attention.in_proj_weight` | [768, 256] | 196.6K | `torch/nn/modules/attention.py` | 速度自注意力 |
+| `v_attention.in_proj_bias` | [768] | 768 | `torch/nn/modules/attention.py` | 偏置 |
+| `v_attention.out_proj.weight` | [256, 256] | 65.5K | `torch/nn/modules/attention.py` | 输出投影 |
+| `v_attention.out_proj.bias` | [256] | 256 | `torch/nn/modules/attention.py` | 偏置 |
+| `t_attention.in_proj_weight` | [768, 256] | 196.6K | `torch/nn/modules/attention.py` | 轨迹自注意力（仅最后一层） |
+| `t_attention.in_proj_bias` | [768] | 768 | `torch/nn/modules/attention.py` | 偏置 |
+| `t_attention.out_proj.weight` | [256, 256] | 65.5K | `torch/nn/modules/attention.py` | 输出投影 |
+| `t_attention.out_proj.bias` | [256] | 256 | `torch/nn/modules/attention.py` | 偏置 |
 | **多头注意力总计** | - | **~1.84M** | - | |
 
 #### 1.7.3 前馈网络（FFN）
 
-每个解码器层包含3个（路径+速度+轨迹）：
+**代码位置**: `navsim/agents/sparsedrive/custom_decoder.py:161-165`（路径）、`custom_decoder.py:203-207`（速度）、`custom_decoder.py:252-256`（轨迹）
 
-| 参数 | 形状 | 参数量 | 文件位置 | 说明 |
-|------|------|--------|----------|------|
-| `p_ffn.0.weight` | [1024, 256] | 262.1K × 6 | `custom_decoder.py:161-165` | FFN第一层 |
-| `p_ffn.2.weight` | [256, 1024] | 262.1K × 6 | `custom_decoder.py:161-165` | FFN第二层 |
+```python
+self.p_ffn = nn.Sequential(
+    nn.Linear(config.d_model, config.d_ffn),  # 256 → 1024
+    nn.ReLU(),
+    nn.Linear(config.d_ffn, config.d_model),  # 1024 → 256
+)
+self.v_ffn = nn.Sequential(...)
+self.t_ffn = nn.Sequential(...)
+```
+
+| 参数 | 形状 | 参数量 | 实际定义位置 | 说明 |
+|------|------|--------|-------------|------|
+| `p_ffn.0.weight` | [1024, 256] | 262.1K | `torch/nn/modules/linear.py` | 路径FFN第一层 |
+| `p_ffn.0.bias` | [1024] | 1.0K | `torch/nn/modules/linear.py` | 路径FFN第一层偏置 |
+| `p_ffn.2.weight` | [256, 1024] | 262.1K | `torch/nn/modules/linear.py` | 路径FFN第二层 |
+| `p_ffn.2.bias` | [256] | 256 | `torch/nn/modules/linear.py` | 路径FFN第二层偏置 |
+| `v_ffn.0.weight` | [1024, 256] | 262.1K | `torch/nn/modules/linear.py` | 速度FFN第一层 |
+| `v_ffn.0.bias` | [1024] | 1.0K | `torch/nn/modules/linear.py` | 速度FFN第一层偏置 |
+| `v_ffn.2.weight` | [256, 1024] | 262.1K | `torch/nn/modules/linear.py` | 速度FFN第二层 |
+| `v_ffn.2.bias` | [256] | 256 | `torch/nn/modules/linear.py` | 速度FFN第二层偏置 |
+| `t_ffn.0.weight` | [1024, 256] | 262.1K | `torch/nn/modules/linear.py` | 轨迹FFN第一层（仅最后一层） |
+| `t_ffn.0.bias` | [1024] | 1.0K | `torch/nn/modules/linear.py` | 轨迹FFN第一层偏置 |
+| `t_ffn.2.weight` | [256, 1024] | 262.1K | `torch/nn/modules/linear.py` | 轨迹FFN第二层（仅最后一层） |
+| `t_ffn.2.bias` | [256] | 256 | `torch/nn/modules/linear.py` | 轨迹FFN第二层偏置 |
 | **FFN 总计** | - | **~3.14M** | - | |
 
 ### 1.8 评分头和指标头 - ~2.5M
 
 #### 1.8.1 路径/速度/轨迹评分头
 
-| 参数 | 形状 | 参数量 | 文件位置 | 说明 |
-|------|------|--------|----------|------|
-| `path_mlp.0.weight` | [1024, 256] | 262.1K × 2 | `custom_decoder.py:175-179` | 路径评分头 |
-| `vel_mlp.0.weight` | [1024, 256] | 262.1K × 2 | `custom_decoder.py:217-221` | 速度评分头 |
-| `traj_mlp.0.weight` | [1024, 256] | 262.1K | `custom_decoder.py:266-270` | 轨迹评分头 |
+**代码位置**: `navsim/agents/sparsedrive/custom_decoder.py:175-179`（路径）、`custom_decoder.py:213-221`（速度）、`custom_decoder.py:266-270`（轨迹）
+
+```python
+self.path_mlp = nn.Sequential(
+    nn.Linear(d_model, d_ffn),  # 256 → 1024
+    nn.ReLU(),
+    nn.Linear(d_ffn, 1),        # 1024 → 1
+)
+self.vel_mlp = nn.Sequential(...)
+self.traj_mlp = nn.Sequential(...)
+```
+
+| 参数 | 形状 | 参数量 | 实际定义位置 | 说明 |
+|------|------|--------|-------------|------|
+| `path_mlp.0.weight` | [1024, 256] | 262.1K | `torch/nn/modules/linear.py` | 路径评分头第一层 |
+| `path_mlp.0.bias` | [1024] | 1.0K | `torch/nn/modules/linear.py` | 路径评分头第一层偏置 |
+| `path_mlp.2.weight` | [1, 1024] | 1.0K | `torch/nn/modules/linear.py` | 路径评分头第二层 |
+| `path_mlp.2.bias` | [1] | 1 | `torch/nn/modules/linear.py` | 路径评分头第二层偏置 |
+| `vel_mlp.0.weight` | [1024, 256] | 262.1K | `torch/nn/modules/linear.py` | 速度评分头第一层 |
+| `vel_mlp.0.bias` | [1024] | 1.0K | `torch/nn/modules/linear.py` | 速度评分头第一层偏置 |
+| `vel_mlp.2.weight` | [1, 1024] | 1.0K | `torch/nn/modules/linear.py` | 速度评分头第二层 |
+| `vel_mlp.2.bias` | [1] | 1 | `torch/nn/modules/linear.py` | 速度评分头第二层偏置 |
+| `traj_mlp.0.weight` | [1024, 256] | 262.1K | `torch/nn/modules/linear.py` | 轨迹评分头第一层 |
+| `traj_mlp.0.bias` | [1024] | 1.0K | `torch/nn/modules/linear.py` | 轨迹评分头第一层偏置 |
+| `traj_mlp.2.weight` | [1, 1024] | 1.0K | `torch/nn/modules/linear.py` | 轨迹评分头第二层 |
+| `traj_mlp.2.bias` | [1] | 1 | `torch/nn/modules/linear.py` | 轨迹评分头第二层偏置 |
 | **评分头总计** | - | **~1.31M** | - | |
 
 #### 1.8.2 PDM指标预测头（8个指标）
 
-| 参数 | 形状 | 参数量 | 文件位置 | 说明 |
-|------|------|--------|----------|------|
-| `metric_heads[metric].0.weight` | [1024, 256] | 262.1K × 8 | `custom_decoder.py:278-284` | 每个指标一个MLP |
-| **指标头总计** | - | **~2.1M** | - | 安全/合规/效率/舒适性指标 |
+**代码位置**: `navsim/agents/sparsedrive/custom_decoder.py:278-284`
+
+```python
+self.metric_heads = nn.ModuleDict()
+for metric in self._config.metrics:
+    self.metric_heads[metric] = nn.Sequential(
+        nn.Linear(d_model, d_ffn),  # 256 → 1024
+        nn.ReLU(),
+        nn.Linear(d_ffn, 1),        # 1024 → 1
+    )
+# metrics = ["no_at_fault_collisions", "drivable_area_compliance", 
+#            "driving_direction_compliance", "traffic_light_compliance",
+#            "time_to_collision_within_bound", "ego_progress", 
+#            "lane_keeping", "history_comfort"]
+```
+
+| 参数 | 形状 | 参数量 | 实际定义位置 | 说明 |
+|------|------|--------|-------------|------|
+| `metric_heads.no_at_fault_collisions.0.weight` | [1024, 256] | 262.1K | `torch/nn/modules/linear.py` | 无责任碰撞指标 |
+| `metric_heads.no_at_fault_collisions.0.bias` | [1024] | 1.0K | `torch/nn/modules/linear.py` | 偏置 |
+| `metric_heads.no_at_fault_collisions.2.weight` | [1, 1024] | 1.0K | `torch/nn/modules/linear.py` | 输出层 |
+| `metric_heads.no_at_fault_collisions.2.bias` | [1] | 1 | `torch/nn/modules/linear.py` | 偏置 |
+| `metric_heads.drivable_area_compliance.0.weight` | [1024, 256] | 262.1K | `torch/nn/modules/linear.py` | 可行驶区域合规指标 |
+| `metric_heads.drivable_area_compliance.0.bias` | [1024] | 1.0K | `torch/nn/modules/linear.py` | 偏置 |
+| `metric_heads.drivable_area_compliance.2.weight` | [1, 1024] | 1.0K | `torch/nn/modules/linear.py` | 输出层 |
+| `metric_heads.drivable_area_compliance.2.bias` | [1] | 1 | `torch/nn/modules/linear.py` | 偏置 |
+| `metric_heads.driving_direction_compliance.0.weight` | [1024, 256] | 262.1K | `torch/nn/modules/linear.py` | 行驶方向合规指标 |
+| `metric_heads.driving_direction_compliance.0.bias` | [1024] | 1.0K | `torch/nn/modules/linear.py` | 偏置 |
+| `metric_heads.driving_direction_compliance.2.weight` | [1, 1024] | 1.0K | `torch/nn/modules/linear.py` | 输出层 |
+| `metric_heads.driving_direction_compliance.2.bias` | [1] | 1 | `torch/nn/modules/linear.py` | 偏置 |
+| `metric_heads.traffic_light_compliance.0.weight` | [1024, 256] | 262.1K | `torch/nn/modules/linear.py` | 交通灯合规指标 |
+| `metric_heads.traffic_light_compliance.0.bias` | [1024] | 1.0K | `torch/nn/modules/linear.py` | 偏置 |
+| `metric_heads.traffic_light_compliance.2.weight` | [1, 1024] | 1.0K | `torch/nn/modules/linear.py` | 输出层 |
+| `metric_heads.traffic_light_compliance.2.bias` | [1] | 1 | `torch/nn/modules/linear.py` | 偏置 |
+| `metric_heads.time_to_collision_within_bound.0.weight` | [1024, 256] | 262.1K | `torch/nn/modules/linear.py` | 碰撞时间边界指标 |
+| `metric_heads.time_to_collision_within_bound.0.bias` | [1024] | 1.0K | `torch/nn/modules/linear.py` | 偏置 |
+| `metric_heads.time_to_collision_within_bound.2.weight` | [1, 1024] | 1.0K | `torch/nn/modules/linear.py` | 输出层 |
+| `metric_heads.time_to_collision_within_bound.2.bias` | [1] | 1 | `torch/nn/modules/linear.py` | 偏置 |
+| `metric_heads.ego_progress.0.weight` | [1024, 256] | 262.1K | `torch/nn/modules/linear.py` | 自车进度指标 |
+| `metric_heads.ego_progress.0.bias` | [1024] | 1.0K | `torch/nn/modules/linear.py` | 偏置 |
+| `metric_heads.ego_progress.2.weight` | [1, 1024] | 1.0K | `torch/nn/modules/linear.py` | 输出层 |
+| `metric_heads.ego_progress.2.bias` | [1] | 1 | `torch/nn/modules/linear.py` | 偏置 |
+| `metric_heads.lane_keeping.0.weight` | [1024, 256] | 262.1K | `torch/nn/modules/linear.py` | 车道保持指标 |
+| `metric_heads.lane_keeping.0.bias` | [1024] | 1.0K | `torch/nn/modules/linear.py` | 偏置 |
+| `metric_heads.lane_keeping.2.weight` | [1, 1024] | 1.0K | `torch/nn/modules/linear.py` | 输出层 |
+| `metric_heads.lane_keeping.2.bias` | [1] | 1 | `torch/nn/modules/linear.py` | 偏置 |
+| `metric_heads.history_comfort.0.weight` | [1024, 256] | 262.1K | `torch/nn/modules/linear.py` | 历史舒适性指标 |
+| `metric_heads.history_comfort.0.bias` | [1024] | 1.0K | `torch/nn/modules/linear.py` | 偏置 |
+| `metric_heads.history_comfort.2.weight` | [1, 1024] | 1.0K | `torch/nn/modules/linear.py` | 输出层 |
+| `metric_heads.history_comfort.2.bias` | [1] | 1 | `torch/nn/modules/linear.py` | 偏置 |
+| **指标头总计** | - | **~2.1M** | - | 8个安全/合规/效率/舒适性指标 |
 
 ---
 
@@ -209,13 +436,8 @@ def save_checkpoint(
     if self.model is None:
         raise AttributeError("Saving a checkpoint is only possible if a model is attached...")
     
-    # 生成checkpoint字典
     checkpoint = self._checkpoint_connector.dump_checkpoint(weights_only)
-    
-    # 保存到文件
     self.strategy.save_checkpoint(checkpoint, filepath, storage_options=storage_options)
-    
-    # 同步所有进程
     self.strategy.barrier("Trainer.save_checkpoint")
 ```
 
@@ -223,60 +445,19 @@ def save_checkpoint(
 
 **文件**: `pytorch_lightning/trainer/connectors/checkpoint_connector.py:404-494`
 
-这是最核心的代码，负责生成保存的字典内容：
-
 ```python
 def dump_checkpoint(self, weights_only: bool = False) -> dict:
-    trainer = self.trainer
-    model = trainer.lightning_module
-    datamodule = trainer.datamodule
-
     checkpoint = {
-        "epoch": trainer.current_epoch,           # 当前epoch
-        "global_step": trainer.global_step,       # 全局步数
+        "epoch": trainer.current_epoch,
+        "global_step": trainer.global_step,
         "pytorch-lightning_version": pl.__version__,
         "state_dict": self._get_lightning_module_state_dict(),  # 模型权重
-        "loops": self._get_loops_state_dict(),    # 训练循环状态
+        "loops": self._get_loops_state_dict(),
     }
-
     if not weights_only:
-        # 回调状态
         checkpoint["callbacks"] = call._call_callbacks_state_dict(trainer)
-
-        # 优化器状态
-        optimizer_states = []
-        for i, optimizer in enumerate(trainer.optimizers):
-            optimizer_state = trainer.strategy.optimizer_state(optimizer)
-            optimizer_states.append(optimizer_state)
-        checkpoint["optimizer_states"] = optimizer_states
-
-        # 学习率调度器
-        lr_schedulers = []
-        for config in trainer.lr_scheduler_configs:
-            lr_schedulers.append(config.scheduler.state_dict())
-        checkpoint["lr_schedulers"] = lr_schedulers
-
-        # 精度插件（混合精度等）
-        prec_plugin = trainer.precision_plugin
-        prec_plugin_state_dict = prec_plugin.state_dict()
-        if prec_plugin_state_dict:
-            checkpoint[prec_plugin.__class__.__qualname__] = prec_plugin_state_dict
-
-    # 超参数
-    for obj in (model, datamodule):
-        if obj and obj.hparams:
-            checkpoint[obj.CHECKPOINT_HYPER_PARAMS_KEY] = obj.hparams
-
-    # DataModule状态
-    if datamodule is not None:
-        datamodule_state_dict = call._call_lightning_datamodule_hook(trainer, "state_dict")
-        if datamodule_state_dict:
-            checkpoint[datamodule.__class__.__qualname__] = datamodule_state_dict
-
-    # 自定义保存钩子
-    call._call_callbacks_on_save_checkpoint(trainer, checkpoint)
-    call._call_lightning_module_hook(trainer, "on_save_checkpoint", checkpoint)
-    
+        checkpoint["optimizer_states"] = [trainer.strategy.optimizer_state(opt) for opt in trainer.optimizers]
+        checkpoint["lr_schedulers"] = [config.scheduler.state_dict() for config in trainer.lr_scheduler_configs]
     return checkpoint
 ```
 
@@ -285,32 +466,17 @@ def dump_checkpoint(self, weights_only: bool = False) -> dict:
 **文件**: `pytorch_lightning/strategies/strategy.py:479-491`
 
 ```python
-def save_checkpoint(
-    self, checkpoint: Dict[str, Any], filepath: _PATH, storage_options: Optional[Any] = None
-) -> None:
-    # 只在主进程(rank 0)保存
+def save_checkpoint(self, checkpoint, filepath, storage_options=None):
     if self.is_global_zero:
         self.checkpoint_io.save_checkpoint(checkpoint, filepath, storage_options=storage_options)
 ```
 
-#### 步骤4：TorchCheckpointIO.save_checkpoint()
-
-**文件**: `lightning_fabric/plugins/io/torch_io.py:37-58`
-
-```python
-def save_checkpoint(self, checkpoint: Dict[str, Any], path: _PATH, storage_options: Optional[Any] = None) -> None:
-    fs = get_filesystem(path)
-    fs.makedirs(os.path.dirname(path), exist_ok=True)
-    _atomic_save(checkpoint, path)
-```
-
-#### 步骤5：_atomic_save() - 最终写入文件
+#### 步骤4：_atomic_save() - 最终写入文件
 
 **文件**: `lightning_fabric/utilities/cloud_io.py:65-80`
 
 ```python
-def _atomic_save(checkpoint: Dict[str, Any], filepath: Union[str, Path]) -> None:
-    """原子保存checkpoint，避免生成不完整的文件"""
+def _atomic_save(checkpoint, filepath):
     bytesbuffer = io.BytesIO()
     torch.save(checkpoint, bytesbuffer)  # ← PyTorch原生保存
     with fsspec.open(filepath, "wb") as f:
@@ -319,98 +485,48 @@ def _atomic_save(checkpoint: Dict[str, Any], filepath: Union[str, Path]) -> None
 
 ### 2.4 checkpoint 文件内容详解
 
-最终保存的 `.ckpt` 文件是一个 PyTorch 字典，包含以下关键字段：
-
 | 字段 | 类型 | 内容说明 |
 |------|------|----------|
 | `epoch` | int | 当前训练到第几个 epoch |
 | `global_step` | int | 全局训练步数（batch数） |
-| `pytorch-lightning_version` | str | PyTorch Lightning 版本号 |
 | `state_dict` | Dict[str, Tensor] | **模型权重**，key 为参数名，value 为张量 |
 | `optimizer_states` | List[Dict] | **优化器状态**，包含动量 `exp_avg`、`exp_avg_sq` 等 |
 | `lr_schedulers` | List[Dict] | 学习率调度器状态 |
-| `callbacks` | Dict | 各回调的状态（如 ModelCheckpoint） |
-| `loops` | Dict | 训练循环的进度状态 |
+| `callbacks` | Dict | 各回调的状态 |
 | `hparams` | Dict | 超参数配置 |
-| `MixedPrecision` | Dict | 混合精度训练的 scaler 状态（如果使用） |
 
 ### 2.5 state_dict 实际内容示例
-
-以 SparseDriveAgent 为例，`state_dict` 的结构如下：
 
 ```python
 {
     "agent._sparsedrive_model._backbone.img_backbone.conv1.weight": tensor([[[[...]]]]),
-    "agent._sparsedrive_model._backbone.img_backbone.bn1.weight": tensor([...]),
     "agent._sparsedrive_model._status_encoding.weight": tensor([...]),
-    "agent._sparsedrive_model._trajectory_head.path_pos_embed.0.weight": tensor([...]),
-    "agent._sparsedrive_model._trajectory_head.traj_vocab": tensor([...]),  # 固定参数也会保存
+    "agent._sparsedrive_model._trajectory_head.traj_vocab": tensor([...]),
     # ... 所有参数
 }
 ```
 
-**注意**：前缀为 `agent.`，因为 `SparseDriveAgent` 是 LightningModule 的子模块。加载时需要移除前缀：
+加载时需要移除 `agent.` 前缀：
 
 ```python
 state_dict = torch.load(checkpoint_path)["state_dict"]
 self.load_state_dict({k.replace("agent.", ""): v for k, v in state_dict.items()})
 ```
 
-### 2.6 optimizer_states 实际内容示例
-
-以 Adam 优化器为例：
-
-```python
-[{
-    "param_groups": [{
-        "lr": 1e-4,
-        "betas": (0.9, 0.999),
-        "eps": 1e-8,
-        "params": [0, 1, 2, ...]
-    }],
-    "state": {
-        0: {
-            "step": 12345,
-            "exp_avg": tensor([...]),    # m_t (一阶动量)
-            "exp_avg_sq": tensor([...]), # v_t (二阶动量)
-        },
-        # ... 每个参数的状态
-    }
-}]
-```
-
-### 2.7 设计亮点
-
-1. **分层设计**：从 Trainer → Strategy → CheckpointIO → torch.save，职责清晰
-2. **分布式支持**：Strategy 层处理多 GPU 同步，只在主进程写入
-3. **原子写入**：先写入内存缓冲区，再一次性写入文件，避免断电导致文件损坏
-4. **可扩展性**：可以替换 CheckpointIO 实现远程存储（S3、GCS等）
-5. **完整恢复**：不仅保存模型权重，还保存优化器状态，支持断点续训
-
 ---
 
 ## 三、参数量统计脚本
 
-以下脚本可用于计算模型的精确参数量：
-
 ```python
-# count_parameters_detailed.py
 import torch
 from navsim.agents.sparsedrive.sparsedrive_config import SparseDriveConfig
 from navsim.agents.sparsedrive.sparsedrive_model import SparseDriveModel
 
-def count_parameters(model):
-    total = 0
-    trainable = 0
-    for name, param in model.named_parameters():
-        total += param.numel()
-        if param.requires_grad:
-            trainable += param.numel()
-    return total, trainable
-
 config = SparseDriveConfig()
 model = SparseDriveModel(config)
-total, trainable = count_parameters(model)
+
+total = sum(p.numel() for p in model.parameters())
+trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
 
 print(f"总参数量: {total/1e6:.2f}M")
 print(f"可训练参数: {trainable/1e6:.2f}M")

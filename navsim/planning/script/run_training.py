@@ -182,6 +182,7 @@ def main(cfg: DictConfig) -> None:
 
     # 开始训练
     logger.info("Starting Training")
+    # pytorch_lightning/trainer/trainer.py
     trainer.fit(
         model=lightning_module,                                             # Lightning模块实例，包含模型和损失函数def training_step
         train_dataloaders=train_dataloader,                                 # 训练数据加载器

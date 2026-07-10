@@ -7,11 +7,10 @@ CUDA_PATH="/usr/local/cuda"
 
 export LD_LIBRARY_PATH="$CUDA_PATH/lib64:$TORCH_PYTHON_PATH/lib:$LD_LIBRARY_PATH"
 
-MODEL_PATH="../model_trt.ts"
+MODEL_PATH="../model_scripted_cpu.pt"
 
 if [ -z "$1" ]; then
     echo "Using default model path: $MODEL_PATH"
-    echo "Note: To test with regular TorchScript model, use: ./run.sh ../model_scripted_cpu.pt"
 else
     MODEL_PATH="$1"
 fi
