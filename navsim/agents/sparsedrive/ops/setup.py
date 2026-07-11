@@ -44,6 +44,13 @@ def make_cuda_ext(
 
 
 if __name__ == "__main__":
+    import sys
+    thrust_path = os.path.join(sys.prefix, "targets", "x86_64-linux", "include", "cccl")
+    if not os.path.exists(thrust_path):
+        thrust_path = "/usr/local/cuda-12.2/include"
+    extra_include = [thrust_path]
+    print(f"Using thrust path: {thrust_path}")
+    
     setup(
         name="deformable_aggregation_ext",
         ext_modules=[
@@ -54,6 +61,7 @@ if __name__ == "__main__":
                     f"src/deformable_aggregation_with_depth.cpp",
                     f"src/deformable_aggregation_with_depth_cuda.cu",
                 ],
+                extra_include_path=extra_include,
             ),
             make_cuda_ext(
                 "deformable_aggregation_ext",
@@ -62,6 +70,7 @@ if __name__ == "__main__":
                     f"src/deformable_aggregation.cpp",
                     f"src/deformable_aggregation_cuda.cu",
                 ],
+                extra_include_path=extra_include,
             ),
         ],
         cmdclass={"build_ext": BuildExtension},
