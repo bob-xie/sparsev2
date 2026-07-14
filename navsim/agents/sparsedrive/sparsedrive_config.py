@@ -2,9 +2,23 @@ from dataclasses import dataclass, field
 from typing import Tuple, List, Optional
 
 import numpy as np
-from nuplan.common.maps.abstract_map import SemanticMapLayer
-from nuplan.common.actor_state.tracked_objects_types import TrackedObjectType
-from nuplan.planning.simulation.trajectory.trajectory_sampling import TrajectorySampling
+
+# 尝试导入 nuplan，如果失败则创建占位类
+try:
+    from nuplan.common.maps.abstract_map import SemanticMapLayer
+    from nuplan.common.actor_state.tracked_objects_types import TrackedObjectType
+    from nuplan.planning.simulation.trajectory.trajectory_sampling import TrajectorySampling
+except ImportError:
+    # 创建占位类，避免导入错误
+    class SemanticMapLayer:
+        pass
+    
+    class TrackedObjectType:
+        pass
+    
+    class TrajectorySampling:
+        def __init__(self, time_horizon=4, interval_length=0.5):
+            pass
 
 
 @dataclass
@@ -74,4 +88,3 @@ class SparseDriveConfig:
     img_mean: List[float] = (123.675, 116.28, 103.53)
     img_std: List[float] = (58.395, 57.12, 57.375)
     to_bgr: bool = False
-
