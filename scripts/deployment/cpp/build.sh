@@ -4,7 +4,7 @@ set -e
 
 LIBTORCH_PATH="/usr/local/lib/python3.10/dist-packages/torch"
 CUDA_PATH="/usr/local/cuda"
-TENSORRT_PATH="/usr/local/tensorrt"
+TENSORRT_PATH="/usr"
 
 echo "=========================================="
 echo "Building SparseDriveV2 C++ Inference"

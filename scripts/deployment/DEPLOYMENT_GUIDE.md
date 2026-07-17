@@ -2,19 +2,19 @@
 
 本文档详细说明如何使用 `export_onnx_direct.py` 和 `export_tensorrt_engine.py` 脚本进行模型导出和部署。
 
----
+***
 
 ## 目录
 
 1. [工作流程概览](#1-工作流程概览)
 2. [前置依赖](#2-前置依赖)
-3. [脚本1：ONNX 导出 (export_onnx_direct.py)](#3-脚本1onnx-导出-export_onnx_directpy)
-4. [脚本2：TensorRT 引擎编译 (export_tensorrt_engine.py)](#4-脚本2tensorrt-引擎编译-export_tensorrt_enginepy)
+3. [脚本1：ONNX 导出 (export\_onnx\_direct.py)](#3-脚本1onnx-导出-export_onnx_directpy)
+4. [脚本2：TensorRT 引擎编译 (export\_tensorrt\_engine.py)](#4-脚本2tensorrt-引擎编译-export_tensorrt_enginepy)
 5. [完整部署流程](#5-完整部署流程)
 6. [常见问题](#6-常见问题)
 7. [附录：输入输出格式](#7-附录输入输出格式)
 
----
+***
 
 ## 1. 工作流程概览
 
@@ -39,14 +39,14 @@ model.engine (TensorRT 优化引擎)
 C++ 推理程序加载并运行
 ```
 
-| 步骤 | 执行位置 | 脚本 | 输出 |
-|------|----------|------|------|
-| 1. 导出 ONNX | 本地电脑 | `export_onnx_direct.py` | `model.onnx` |
-| 2. 传输文件 | SCP | - | - |
-| 3. 编译引擎 | Orin | `export_tensorrt_engine.py` | `model.engine` |
-| 4. 运行推理 | Orin | C++ 程序 | 预测轨迹 |
+| 步骤         | 执行位置 | 脚本                          | 输出             |
+| ---------- | ---- | --------------------------- | -------------- |
+| 1. 导出 ONNX | 本地电脑 | `export_onnx_direct.py`     | `model.onnx`   |
+| 2. 传输文件    | SCP  | -                           | -              |
+| 3. 编译引擎    | Orin | `export_tensorrt_engine.py` | `model.engine` |
+| 4. 运行推理    | Orin | C++ 程序                      | 预测轨迹           |
 
----
+***
 
 ## 2. 前置依赖
 
@@ -70,9 +70,9 @@ nvcc --version
 # 输出示例: release 12.5
 ```
 
----
+***
 
-## 3. 脚本1：ONNX 导出 (export_onnx_direct.py)
+## 3. 脚本1：ONNX 导出 (export\_onnx\_direct.py)
 
 ### 3.1 功能说明
 
@@ -100,11 +100,11 @@ python scripts/deployment/export_onnx_direct.py \
 
 ### 3.3 命令行参数
 
-| 参数 | 类型 | 必填 | 默认值 | 说明 |
-|------|------|------|--------|------|
-| `--ckpt` | str | ✅ | - | 训练好的模型权重路径（.ckpt 文件） |
-| `--output` | str | ❌ | model.onnx | ONNX 模型输出路径 |
-| `--opset` | int | ❌ | 17 | ONNX 算子集版本（建议 17） |
+| 参数         | 类型  | 必填 | 默认值        | 说明                   |
+| ---------- | --- | -- | ---------- | -------------------- |
+| `--ckpt`   | str | ✅  | -          | 训练好的模型权重路径（.ckpt 文件） |
+| `--output` | str | ❌  | model.onnx | ONNX 模型输出路径          |
+| `--opset`  | int | ❌  | 17         | ONNX 算子集版本（建议 17）    |
 
 ### 3.4 输出示例
 
@@ -145,13 +145,13 @@ ONNX export completed!
 ============================================================
 ```
 
----
+***
 
-## 4. 脚本2：TensorRT 引擎编译 (export_tensorrt_engine.py)
+## 4. 脚本2：TensorRT 引擎编译 (export\_tensorrt\_engine.py)
 
 ### 4.1 功能说明
 
-将 ONNX 模型编译为针对 Orin GPU (sm_87) 优化的推理引擎，支持 FP16 混合精度加速。
+将 ONNX 模型编译为针对 Orin GPU (sm\_87) 优化的推理引擎，支持 FP16 混合精度加速。
 
 **⚠️ 必须在 Orin 上执行**，因为引擎是针对特定 GPU 架构编译的。
 
@@ -184,14 +184,14 @@ python export_tensorrt_engine.py \
 
 ### 4.3 命令行参数
 
-| 参数 | 类型 | 必填 | 默认值 | 说明 |
-|------|------|------|--------|------|
-| `--onnx` | str | ✅ | - | ONNX 模型文件路径 |
-| `--output` | str | ❌ | model.engine | TensorRT 引擎输出路径 |
-| `--fp16` | flag | ❌ | True | 启用 FP16 混合精度 |
-| `--fp32` | flag | ❌ | False | 使用 FP32 精度（覆盖 --fp16） |
-| `--workspace` | int | ❌ | 1 | 工作空间大小（GB） |
-| `--batch-size` | int | ❌ | 1 | 推理批次大小 |
+| 参数             | 类型   | 必填 | 默认值          | 说明                    |
+| -------------- | ---- | -- | ------------ | --------------------- |
+| `--onnx`       | str  | ✅  | -            | ONNX 模型文件路径           |
+| `--output`     | str  | ❌  | model.engine | TensorRT 引擎输出路径       |
+| `--fp16`       | flag | ❌  | True         | 启用 FP16 混合精度          |
+| `--fp32`       | flag | ❌  | False        | 使用 FP32 精度（覆盖 --fp16） |
+| `--workspace`  | int  | ❌  | 1            | 工作空间大小（GB）            |
+| `--batch-size` | int  | ❌  | 1            | 推理批次大小                |
 
 ### 4.4 输出示例
 
@@ -244,7 +244,7 @@ TensorRT engine build completed!
 ============================================================
 ```
 
----
+***
 
 ## 5. 完整部署流程
 
@@ -288,6 +288,17 @@ python export_tensorrt_engine.py \
 ls -lh model.engine
 ```
 
+TensorRT 编译失败，原因是 某些节点找不到实现 ，且有内存不足警告
+
+```
+python export_tensorrt_engine.py \
+    --onnx model_direct.onnx \
+    --output model.engine \
+    --fp32 \
+    --workspace 4
+#- FP16 模式下某些算子可能没有实现 - 增加工作空间（4GB）可以让 TensorRT 尝试更多优化策略
+```
+
 ### 5.4 步骤4：运行 C++ 推理
 
 ```bash
@@ -297,7 +308,7 @@ bash build.sh
 ./sparsedrive_infer --engine model.engine --test
 ```
 
----
+***
 
 ## 6. 常见问题
 
@@ -306,6 +317,7 @@ bash build.sh
 **问题**：`ModuleNotFoundError: No module named 'nuplan'`
 
 **解决**：脚本已内置简化配置，无需安装 nuplan。确保运行前执行：
+
 ```bash
 source scripts/cache/path_export.sh
 ```
@@ -323,6 +335,7 @@ source scripts/cache/path_export.sh
 **问题**：`FP16 not supported on this platform`
 
 **解决**：使用 `--fp32` 参数回退到 FP32 精度：
+
 ```bash
 python export_tensorrt_engine.py --onnx model.onnx --output model.engine --fp32
 ```
@@ -332,38 +345,40 @@ python export_tensorrt_engine.py --onnx model.onnx --output model.engine --fp32
 **问题**：`CUDA out of memory`
 
 **解决**：
+
 1. 增加工作空间：`--workspace 2`（2GB）
 2. 使用 FP16 模式（默认启用）
-3. 减小 batch_size：`--batch-size 1`
+3. 减小 batch\_size：`--batch-size 1`
 
 ### 6.5 ONNX 与 PyTorch 输出不一致
 
 **问题**：`Output difference is larger than expected`
 
 **解决**：差异小于 1e-3 属于正常范围（浮点精度差异）。若差异过大，检查：
+
 1. `opset` 版本是否正确（建议 17）
 2. 模型是否在 eval 模式
 3. 是否使用了相同的输入数据
 
----
+***
 
 ## 7. 附录：输入输出格式
 
 ### 7.1 输入格式
 
-| 输入名称 | 形状 | 说明 |
-|----------|------|------|
-| `imgs` | `[B, 3, 3, 256, 512]` | 多视角相机图像（B=batch, 3个相机, RGB, H=256, W=512） |
-| `status_feature` | `[B, 8]` | Ego 状态（4命令 + 2速度 + 2加速度） |
-| `lidar2img` | `[B, 3, 4, 4]` | LiDAR到图像投影矩阵 |
-| `lidar2cam` | `[B, 3, 4, 4]` | LiDAR到相机外参矩阵 |
-| `cam2lidar` | `[B, 3, 4, 4]` | 相机到LiDAR变换矩阵 |
-| `cam_intrinsic` | `[B, 3, 3, 3]` | 相机内参矩阵 |
+| 输入名称             | 形状                    | 说明                                        |
+| ---------------- | --------------------- | ----------------------------------------- |
+| `imgs`           | `[B, 3, 3, 256, 512]` | 多视角相机图像（B=batch, 3个相机, RGB, H=256, W=512） |
+| `status_feature` | `[B, 8]`              | Ego 状态（4命令 + 2速度 + 2加速度）                  |
+| `lidar2img`      | `[B, 3, 4, 4]`        | LiDAR到图像投影矩阵                              |
+| `lidar2cam`      | `[B, 3, 4, 4]`        | LiDAR到相机外参矩阵                              |
+| `cam2lidar`      | `[B, 3, 4, 4]`        | 相机到LiDAR变换矩阵                              |
+| `cam_intrinsic`  | `[B, 3, 3, 3]`        | 相机内参矩阵                                    |
 
 ### 7.2 输出格式
 
-| 输出名称 | 形状 | 说明 |
-|----------|------|------|
+| 输出名称         | 形状          | 说明                            |
+| ------------ | ----------- | ----------------------------- |
 | `trajectory` | `[B, 8, 3]` | 预测轨迹（8个点，每个点包含 x, y, heading） |
 
 ### 7.3 形状参数说明
@@ -375,19 +390,19 @@ H, W = 256, 512    # 图像尺寸
 num_poses = 8      # 轨迹点数量（4秒预测，每0.5秒一个点）
 ```
 
----
+***
 
 ## 版本兼容性
 
-| TensorRT 版本 | 测试状态 | 说明 |
-|--------------|----------|------|
-| 10.x | ✅ 通过 | 需要使用 `build_serialized_network` API |
-| 9.x | ✅ 通过 | 兼容新旧 API |
-| 8.x | ✅ 通过 | 使用 `build_engine` API |
-| < 8.0 | ⚠️ 未测试 | 可能需要调整 API 调用方式 |
+| TensorRT 版本 | 测试状态   | 说明                                  |
+| ----------- | ------ | ----------------------------------- |
+| 10.x        | ✅ 通过   | 需要使用 `build_serialized_network` API |
+| 9.x         | ✅ 通过   | 兼容新旧 API                            |
+| 8.x         | ✅ 通过   | 使用 `build_engine` API               |
+| < 8.0       | ⚠️ 未测试 | 可能需要调整 API 调用方式                     |
 
----
+***
 
-**最后更新**: 2026-07-14  
-**适用项目**: SparseDriveV2  
-**目标平台**: NVIDIA Jetson AGX Orin (sm_87)
+**最后更新**: 2026-07-14\
+**适用项目**: SparseDriveV2\
+**目标平台**: NVIDIA Jetson AGX Orin (sm\_87)

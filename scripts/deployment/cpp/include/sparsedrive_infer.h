@@ -66,7 +66,6 @@ private:
     bool model_loaded_;
     bool use_trt_;
     
-    std::vector<void*> bindings_;
     std::vector<torch::Tensor> input_tensors_;
     std::vector<torch::Tensor> output_tensors_;
     std::map<std::string, int> input_indices_;

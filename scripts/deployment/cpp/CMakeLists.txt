@@ -6,7 +6,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 set(LIBTORCH_PATH "/usr/local/lib/python3.10/dist-packages/torch")
 set(CUDA_PATH "/usr/local/cuda")
-set(TENSORRT_PATH "/usr/local/tensorrt")
+set(TENSORRT_PATH "/usr")
 
 include_directories(include)
 include_directories(${LIBTORCH_PATH}/include)

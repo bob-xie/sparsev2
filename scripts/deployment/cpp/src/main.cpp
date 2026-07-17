@@ -9,19 +9,32 @@ int main(int argc, char* argv[]) {
     std::cout << "SparseDriveV2 C++ Deployment Test" << std::endl;
     std::cout << "============================================================" << std::endl;
     
-    if (argc < 2) {
-        std::cerr << "Usage: " << argv[0] << " <model_path>" << std::endl;
-        return 1;
+    std::string model_path = "";
+    bool use_gpu = true;
+    bool test_mode = false;
+    
+    for (int i = 1; i < argc; ++i) {
+        std::string arg = argv[i];
+        if (arg == "--engine" && i + 1 < argc) {
+            model_path = argv[i + 1];
+            i++;
+        } else if (arg == "--model" && i + 1 < argc) {
+            model_path = argv[i + 1];
+            i++;
+        } else if (arg == "--cpu") {
+            use_gpu = false;
+        } else if (arg == "--gpu") {
+            use_gpu = true;
+        } else if (arg == "--test") {
+            test_mode = true;
+        } else if (model_path.empty()) {
+            model_path = arg;
+        }
     }
     
-    std::string model_path = argv[1];
-    bool use_gpu = true;
-    
-    if (argc >= 3) {
-        std::string gpu_flag = argv[2];
-        if (gpu_flag == "--cpu") {
-            use_gpu = false;
-        }
+    if (model_path.empty()) {
+        std::cerr << "Usage: " << argv[0] << " --engine <model_path> [--cpu|--gpu]" << std::endl;
+        return 1;
     }
     
     std::cout << "\nModel path: " << model_path << std::endl;

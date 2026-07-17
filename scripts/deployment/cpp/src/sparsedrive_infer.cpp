@@ -3,6 +3,8 @@
 #include <fstream>
 #include <sstream>
 #include <cstring>
+#include <NvInferRuntimeCommon.h>
+#include <cuda_runtime.h>
 
 namespace sparsedrive {
 
@@ -19,7 +21,6 @@ SparseDriveInfer::SparseDriveInfer()
       logger_(std::make_unique<Logger>()) {}
 
 SparseDriveInfer::~SparseDriveInfer() {
-    bindings_.clear();
     input_tensors_.clear();
     output_tensors_.clear();
     input_indices_.clear();
@@ -81,10 +82,10 @@ bool SparseDriveInfer::load_tensorrt_engine(const std::string& engine_path, bool
         engine_file.read(buffer.data(), size);
         
         nvinfer1::IRuntime* runtime = nvinfer1::createInferRuntime(*logger_);
+        
         trt_engine_ = std::unique_ptr<nvinfer1::ICudaEngine>(
-            runtime->deserializeCudaEngine(buffer.data(), size, nullptr)
+            runtime->deserializeCudaEngine(buffer.data(), size)
         );
-        runtime->destroy();
         
         if (!trt_engine_) {
             std::cerr << "Failed to deserialize TensorRT engine" << std::endl;
@@ -124,37 +125,51 @@ bool SparseDriveInfer::load_tensorrt_engine(const std::string& engine_path, bool
 void SparseDriveInfer::allocate_buffers() {
     if (!trt_engine_) return;
     
-    int num_bindings = trt_engine_->getNbBindings();
-    bindings_.resize(num_bindings);
+    int num_io_tensors = trt_engine_->getNbIOTensors();
     
-    for (int i = 0; i < num_bindings; ++i) {
-        const char* name = trt_engine_->getBindingName(i);
-        bool is_input = trt_engine_->bindingIsInput(i);
-        nvinfer1::Dims dims = trt_engine_->getBindingDimensions(i);
-        nvinfer1::DataType dtype = trt_engine_->getBindingDataType(i);
+    std::vector<std::string> input_names = {"imgs", "status_feature", "lidar2img", 
+                                            "lidar2cam", "cam2lidar", "cam_intrinsic"};
+    std::vector<std::string> output_names = {"trajectory"};
+    
+    for (int i = 0; i < num_io_tensors; ++i) {
+        const char* name = trt_engine_->getIOTensorName(i);
+        std::string name_str(name);
         
-        size_t element_size = (dtype == nvinfer1::DataType::kFLOAT) ? sizeof(float) : 
-                              (dtype == nvinfer1::DataType::kHALF) ? sizeof(__half) : sizeof(float);
+        nvinfer1::DataType dtype = trt_engine_->getTensorDataType(name_str.c_str());
         
-        size_t size = 1;
-        for (int j = 0; j < dims.nbDims; ++j) {
-            size *= dims.d[j];
+        size_t element_size = sizeof(float);
+        torch::ScalarType torch_dtype = torch::kFloat32;
+        
+        if (dtype == nvinfer1::DataType::kFLOAT) {
+            element_size = sizeof(float);
+            torch_dtype = torch::kFloat32;
+        } else if (dtype == nvinfer1::DataType::kHALF) {
+            element_size = 2;
+            torch_dtype = torch::kFloat16;
         }
-        size *= element_size;
         
         torch::TensorOptions options = torch::TensorOptions()
-            .dtype(dtype == nvinfer1::DataType::kHALF ? torch::kFloat16 : torch::kFloat32)
+            .dtype(torch_dtype)
             .device(device_);
         
-        torch::Tensor tensor = torch::empty({(long long)size / element_size}, options);
-        bindings_[i] = tensor.data_ptr();
+        torch::Tensor tensor = torch::empty({1024}, options);
+        
+        trt_context_->setTensorAddress(name, tensor.data_ptr());
+        
+        bool is_input = false;
+        for (const auto& in_name : input_names) {
+            if (name_str == in_name) {
+                is_input = true;
+                break;
+            }
+        }
         
         if (is_input) {
             input_tensors_.push_back(tensor);
-            input_indices_[name] = input_tensors_.size() - 1;
+            input_indices_[name_str] = input_tensors_.size() - 1;
         } else {
             output_tensors_.push_back(tensor);
-            output_indices_[name] = output_tensors_.size() - 1;
+            output_indices_[name_str] = output_tensors_.size() - 1;
         }
     }
 }
@@ -200,10 +215,16 @@ bool SparseDriveInfer::infer(const InferenceInput& input, InferenceOutput& outpu
         if (use_trt_) {
             copy_inputs(input);
             
-            bool success = trt_context_->enqueueV2(bindings_.data(), nullptr, nullptr);
+            cudaStream_t stream = nullptr;
+            
+            bool success = trt_context_->enqueueV3(stream);
             if (!success) {
                 std::cerr << "TensorRT inference failed" << std::endl;
                 return false;
+            }
+            
+            if (device_.is_cuda()) {
+                cudaStreamSynchronize(stream);
             }
             
             copy_outputs(output);
@@ -260,17 +281,10 @@ std::string SparseDriveInfer::get_model_info() const {
     }
     
     if (use_trt_ && trt_engine_) {
-        oss << "TRT bindings: " << trt_engine_->getNbBindings() << std::endl;
-        int num_inputs = 0, num_outputs = 0;
-        for (int i = 0; i < trt_engine_->getNbBindings(); ++i) {
-            if (trt_engine_->bindingIsInput(i)) {
-                num_inputs++;
-            } else {
-                num_outputs++;
-            }
-        }
-        oss << "TRT inputs: " << num_inputs << std::endl;
-        oss << "TRT outputs: " << num_outputs << std::endl;
+        int num_io_tensors = trt_engine_->getNbIOTensors();
+        oss << "TRT IO tensors: " << num_io_tensors << std::endl;
+        oss << "TRT inputs: " << input_indices_.size() << std::endl;
+        oss << "TRT outputs: " << output_indices_.size() << std::endl;
     }
     
     return oss.str();
