@@ -22,17 +22,17 @@ import torch
 # once_differentiable: 一次可微的装饰器，用于反向传播计算
 from torch.autograd.function import Function, once_differentiable
 
-# ============================================================================
-# 导入 CUDA 算子（由 C++/CUDA 实现）
-# deformable_aggregation_ext: 标准可变形聚合的 CUDA 实现
-# deformable_aggregation_with_depth_ext: 带深度的可变形聚合 CUDA 实现
-# ============================================================================
-from . import deformable_aggregation_ext
-from . import deformable_aggregation_with_depth_ext
-
-
-# ============================================================================
-# DeformableAggregationFunction: 标准可变形特征聚合前向/反向传播函数
+# # ============================================================================
+# # 导入 CUDA 算子（由 C++/CUDA 实现）
+# # deformable_aggregation_ext: 标准可变形聚合的 CUDA 实现
+# # deformable_aggregation_with_depth_ext: 带深度的可变形聚合 CUDA 实现
+# # ============================================================================
+# from . import deformable_aggregation_ext
+# from . import deformable_aggregation_with_depth_ext
+# 
+# 
+# # ============================================================================
+# # DeformableAggregationFunction: 标准可变形特征聚合前向/反向传播函数
 # 继承自 torch.autograd.Function，实现自定义梯度计算
 # ============================================================================
 class DeformableAggregationFunction(Function):
@@ -586,3 +586,9 @@ def deformable_format(
                     )
 
         return feature_maps
+
+# 条件导入 CUDA 扩展
+try:
+    from . import deformable_aggregation_ext
+except ImportError:
+    deformable_aggregation_ext = None

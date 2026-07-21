@@ -1,5 +1,6 @@
 from .deformable_aggregation import (
-    deformable_aggregation_func,
-    feature_maps_format,
     deformable_format,
+    deformable_aggregation_func,
 )
+
+__all__ = ['deformable_format', 'deformable_aggregation_func']

@@ -92,11 +92,8 @@ def export_model(ckpt_path: str, output_path: str):
     """
     print(f"Loading checkpoint from: {ckpt_path}")
     
-    # 加载权重
-    if torch.cuda.is_available():
-        state_dict = torch.load(ckpt_path)["state_dict"]
-    else:
-        state_dict = torch.load(ckpt_path, map_location=torch.device("cpu"))["state_dict"]
+    # 强制使用 CPU（避免 CUDA 内存不足）
+    state_dict = torch.load(ckpt_path, map_location=torch.device("cpu"))["state_dict"]
     
     # 移除"agent."前缀和"_sparsedrive_model."前缀
     state_dict = {k.replace("agent.", "").replace("_sparsedrive_model.", ""): v for k, v in state_dict.items()}
@@ -130,14 +127,14 @@ def export_model(ckpt_path: str, output_path: str):
     example_cam2lidar = torch.randn(B, num_cams, 4, 4)
     example_cam_intrinsic = torch.randn(B, num_cams, 3, 3)
     
-    if torch.cuda.is_available():
-        script_model = script_model.cuda()
-        example_imgs = example_imgs.cuda()
-        example_status = example_status.cuda()
-        example_lidar2img = example_lidar2img.cuda()
-        example_lidar2cam = example_lidar2cam.cuda()
-        example_cam2lidar = example_cam2lidar.cuda()
-        example_cam_intrinsic = example_cam_intrinsic.cuda()
+    # 强制使用 CPU
+    script_model = script_model.cpu()
+    example_imgs = example_imgs.cpu()
+    example_status = example_status.cpu()
+    example_lidar2img = example_lidar2img.cpu()
+    example_lidar2cam = example_lidar2cam.cpu()
+    example_cam2lidar = example_cam2lidar.cpu()
+    example_cam_intrinsic = example_cam_intrinsic.cpu()
     
     # 导出为 TorchScript
     print("Exporting to TorchScript...")
@@ -165,9 +162,7 @@ def export_model(ckpt_path: str, output_path: str):
     # 验证导出的模型
     print("\n验证导出的模型...")
     loaded_model = torch.jit.load(output_path)
-    
-    if torch.cuda.is_available():
-        loaded_model = loaded_model.cuda()
+    loaded_model = loaded_model.cpu()
     
     with torch.no_grad():
         output = loaded_model(example_imgs, example_status, example_lidar2img, example_lidar2cam, example_cam2lidar, example_cam_intrinsic)

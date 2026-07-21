@@ -2,9 +2,9 @@
 
 set -e
 
-TORCH_PYTHON_PATH="/usr/local/lib/python3.10/dist-packages/torch"
-LIBTORCH_PATH="$TORCH_PYTHON_PATH"
+LIBTORCH_PATH="/usr/local/lib/python3.10/dist-packages/torch"
 CUDA_PATH="/usr/local/cuda"
+TENSORRT_PATH="/usr"
 
 echo "=========================================="
 echo "Building SparseDriveV2 C++ Inference"
@@ -12,30 +12,23 @@ echo "=========================================="
 echo ""
 echo "LibTorch path: $LIBTORCH_PATH"
 echo "CUDA path: $CUDA_PATH"
+echo "TensorRT path: $TENSORRT_PATH"
 echo ""
 
-echo "Checking TorchConfig.cmake..."
-TORCH_CONFIG=$(find "$TORCH_PYTHON_PATH" -name "TorchConfig.cmake" 2>/dev/null | head -1)
-if [ -n "$TORCH_CONFIG" ]; then
-    echo "Found: $TORCH_CONFIG"
-    TORCH_DIR=$(dirname "$TORCH_CONFIG")
-    echo "Torch_DIR: $TORCH_DIR"
-else
-    echo "NOT FOUND - checking lib directory..."
-    TORCH_DIR="$TORCH_PYTHON_PATH/lib"
-    echo "Using Torch_DIR: $TORCH_DIR"
-fi
+echo "Checking libtorch libraries..."
+ls -la $LIBTORCH_PATH/lib/libtorch*.so 2>/dev/null || echo "WARNING: Some libtorch libraries may be missing"
+
+echo "Checking TensorRT libraries..."
+ls -la $TENSORRT_PATH/lib/libnvinfer*.so 2>/dev/null || echo "WARNING: Some TensorRT libraries may be missing"
 
 mkdir -p build
 cd build
 
 export CUDA_HOME="$CUDA_PATH"
 export PATH="$CUDA_PATH/bin:$PATH"
-export LD_LIBRARY_PATH="$CUDA_PATH/lib64:$TORCH_PYTHON_PATH/lib:$LD_LIBRARY_PATH"
+export LD_LIBRARY_PATH="$CUDA_PATH/lib64:$LIBTORCH_PATH/lib:$TENSORRT_PATH/lib:$LD_LIBRARY_PATH"
 
-cmake .. -DCMAKE_BUILD_TYPE=Release \
-         -DCMAKE_PREFIX_PATH="$LIBTORCH_PATH" \
-         -DTorch_DIR="$TORCH_DIR"
+cmake .. -DCMAKE_BUILD_TYPE=Release
 
 echo ""
 echo "=========================================="

@@ -2,10 +2,13 @@
 
 set -e
 
-TORCH_PYTHON_PATH="/usr/local/lib/python3.10/dist-packages/torch"
+LIBTORCH_PATH="/usr/local/lib/python3.10/dist-packages/torch"
 CUDA_PATH="/usr/local/cuda"
+TENSORRT_PATH="/usr/local/tensorrt"
 
-export LD_LIBRARY_PATH="$CUDA_PATH/lib64:$TORCH_PYTHON_PATH/lib:$LD_LIBRARY_PATH"
+export LD_LIBRARY_PATH="$CUDA_PATH/lib64:$LIBTORCH_PATH/lib:$TENSORRT_PATH/lib:$LD_LIBRARY_PATH"
+export CPUINFO_PRINT_ERRORS=0
+export CPUINFO_IGNORE_ERRORS=1
 
 MODEL_PATH="../model_scripted_cpu.pt"
 
@@ -24,6 +27,8 @@ echo "=========================================="
 echo "Running SparseDriveV2 C++ Inference"
 echo "=========================================="
 echo "Model: $MODEL_PATH"
+echo "LibTorch: $LIBTORCH_PATH"
+echo "TensorRT: $TENSORRT_PATH"
 echo "=========================================="
 echo ""
 
